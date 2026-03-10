@@ -362,9 +362,14 @@ def render_home(authenticated: bool) -> None:
     st.markdown(f"### {t('Enterprise Impact', 'الأثر المؤسسي')}")
     impact_cols = st.columns([1.05, 0.95], vertical_alignment="top")
     with impact_cols[0]:
-        render_page_header(
-            t("Built for Enterprise Knowledge Management", "مصمم لإدارة المعرفة المؤسسية"),
-            t("Reduce manual document processing and prepare large PDFs for structured retrieval.", "قلّل المعالجة اليدوية للوثائق وجهّز ملفات PDF الكبيرة للاسترجاع المنظم."),
+        st.markdown(
+            f"""
+            <div class="kb-note-card">
+              <h3>{t('Built for Enterprise Knowledge Management', 'مصمم لإدارة المعرفة المؤسسية')}</h3>
+              <p>{t('Reduce manual document processing and prepare large PDFs for structured retrieval.', 'قلّل المعالجة اليدوية للوثائق وجهّز ملفات PDF الكبيرة للاسترجاع المنظم.')}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
         st.markdown(f"- {t('Reduce manual document processing', 'تقليل المعالجة اليدوية للوثائق')}")
         st.markdown(f"- {t('Improve information retrieval', 'تحسين استرجاع المعلومات')}")
@@ -530,14 +535,24 @@ def render_topic_cards(draft: KBDraft, privacy_on: bool) -> None:
     columns = st.columns(3)
     for index, topic in enumerate(topic_docs):
         with columns[index % 3]:
-            st.markdown("<div class='kb-topic-card'>", unsafe_allow_html=True)
-            st.markdown(f"### {mask_sensitive_text(topic.title, privacy_on)}")
-            st.markdown(mask_sensitive_text(topic.summary, privacy_on))
+            title = mask_sensitive_text(topic.title, privacy_on)
+            summary = mask_sensitive_text(topic.summary, privacy_on)
+            st.markdown(
+                f"""
+                <div class='kb-topic-card'>
+                  <div class='kb-topic-card-header'>
+                    <div class='kb-topic-card-title'>{title}</div>
+                    <div class='kb-topic-card-subtitle'>{t('Knowledge article', 'مقال معرفي')}</div>
+                  </div>
+                  <p class='kb-topic-card-summary'>{summary}</p>
+                """,
+                unsafe_allow_html=True,
+            )
             if topic.tags:
                 tag_markup = " ".join(f"<span class='kb-chip'>{mask_sensitive_text(tag, privacy_on)}</span>" for tag in topic.tags)
                 st.markdown(f"<div class='kb-topic-meta'>{tag_markup}</div>", unsafe_allow_html=True)
             if topic.key_points:
-                st.markdown(f"**{t('Key Points', 'النقاط الرئيسية')}**")
+                st.markdown(f"<div class='kb-topic-section-label'>{t('Key Points', 'النقاط الرئيسية')}</div>", unsafe_allow_html=True)
                 for point in topic.key_points[:3]:
                     st.markdown(f"- {mask_sensitive_text(point, privacy_on)}")
             if topic.sections and topic.sections[0].source_pages:
@@ -959,6 +974,12 @@ def render_articles_page(settings: dict) -> None:
         key="articles_search",
         placeholder=t("Search by topic title or article content", "ابحث بعنوان الموضوع أو بمحتوى المقال"),
     ).strip().lower()
+    topic_docs = split_draft_into_topic_documents(draft)
+    summary_cols = st.columns(4)
+    summary_cols[0].metric(t("Articles", "المقالات"), len(topic_docs))
+    summary_cols[1].metric(t("Tagged topics", "موضوعات مع وسوم"), sum(1 for topic in topic_docs if topic.tags))
+    summary_cols[2].metric(t("Sections in draft", "أقسام المسودة"), len(draft.sections))
+    summary_cols[3].metric(t("Word outputs", "مخرجات Word"), len(topic_docs) + 1)
     tabs = st.tabs([
         t("Topic Cards", "بطاقات الموضوعات"),
         t("Generated Files", "الملفات الناتجة"),
@@ -1117,7 +1138,7 @@ def render_settings(settings: dict) -> None:
         user_entry = next((item for item in list_users() if item["user_id"] == st.session_state["auth_user"]), None)
         st.markdown(
             f"""
-            <div class="kb-note-card">
+            <div class="kb-setting-card">
               <h3>{st.session_state['auth_display_name']}</h3>
               <p><strong>{t('User ID', 'معرف المستخدم')}:</strong> {st.session_state['auth_user']}</p>
               <p><strong>{t('Role', 'الدور')}:</strong> {st.session_state['auth_role']}</p>
@@ -1141,7 +1162,7 @@ def render_settings(settings: dict) -> None:
             disabled=not can_edit_settings,
         )
         st.markdown(
-            f"<div class='kb-note-card'><h3>{t('OCR Tool Status', 'حالة أداة OCR')}</h3><p>{ocr_status['message']}</p></div>",
+            f"<div class='kb-setting-card'><h3>{t('OCR Tool Status', 'حالة أداة OCR')}</h3><p>{ocr_status['message']}</p></div>",
             unsafe_allow_html=True,
         )
         if can_edit_settings and st.button(t("Save Settings", "حفظ الإعدادات"), use_container_width=True):
@@ -1157,13 +1178,24 @@ def render_settings(settings: dict) -> None:
     with tabs[2]:
         if is_supervisor():
             st.markdown(
-                f"<div class='kb-note-card'><h3>{t('Collaboration Guidance', 'إرشادات التعاون')}</h3><p>{t('Invite teammates as GitHub collaborators and keep feature work on separate branches before merging.', 'قم بدعوة زملائك كمتعاونين على GitHub، واحتفظ بالعمل على الفروع المنفصلة قبل الدمج.')}</p></div>",
+                f"<div class='kb-setting-card'><h3>{t('Collaboration Guidance', 'إرشادات التعاون')}</h3><p>{t('Invite teammates as GitHub collaborators and keep feature work on separate branches before merging.', 'قم بدعوة زملائك كمتعاونين على GitHub، واحتفظ بالعمل على الفروع المنفصلة قبل الدمج.')}</p></div>",
                 unsafe_allow_html=True,
             )
-            for entry in list_users():
-                with st.expander(f"{entry['display_name']} ({entry['user_id']}) | {entry['status']}"):
-                    st.write(f"{t('Role', 'الدور')}: {entry['role']}")
-                    st.write(f"{t('Failed login attempts', 'محاولات الدخول الفاشلة')}: {entry['failed_login_attempts']}")
+            user_cards = st.columns(2)
+            for idx, entry in enumerate(list_users()):
+                with user_cards[idx % 2]:
+                    st.markdown(
+                        f"""
+                        <div class="kb-setting-card kb-admin-user-card">
+                          <h3>{entry['display_name']}</h3>
+                          <p><strong>{t('User ID', 'معرف المستخدم')}:</strong> {entry['user_id']}</p>
+                          <p><strong>{t('Role', 'الدور')}:</strong> {entry['role']}</p>
+                          <p><strong>{t('Status', 'الحالة')}:</strong> {entry['status']}</p>
+                          <p><strong>{t('Failed login attempts', 'محاولات الدخول الفاشلة')}:</strong> {entry['failed_login_attempts']}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                     action_cols = st.columns(3)
                     if action_cols[0].button(t("Activate", "تفعيل"), key=f"activate_{entry['user_id']}", use_container_width=True):
                         update_user_status(entry["user_id"], "active")
@@ -1173,7 +1205,7 @@ def render_settings(settings: dict) -> None:
                         update_user_status(entry["user_id"], "inactive")
                         append_audit_event(st.session_state["auth_user"], "deactivate_user", "success", {"target_user": entry["user_id"]})
                         st.rerun()
-                    new_password = st.text_input(f"{t('Reset password for', 'إعادة تعيين كلمة المرور لـ')} {entry['user_id']}", type="password", key=f"pwd_{entry['user_id']}")
+                    new_password = st.text_input(f"{t('Reset password', 'إعادة تعيين كلمة المرور')} • {entry['user_id']}", type="password", key=f"pwd_{entry['user_id']}")
                     if action_cols[2].button(t("Reset Password", "إعادة تعيين كلمة المرور"), key=f"reset_{entry['user_id']}", use_container_width=True) and new_password:
                         reset_user_password(entry["user_id"], new_password)
                         append_audit_event(st.session_state["auth_user"], "reset_password", "success", {"target_user": entry["user_id"]})
@@ -1200,7 +1232,7 @@ def render_settings(settings: dict) -> None:
         with fb_right:
             st.markdown(
                 f"""
-                <div class="kb-note-card">
+                <div class="kb-setting-card">
                   <h3>{t('System Status', 'حالة النظام')}</h3>
                   <p>{t('Open feedback items', 'ملاحظات مفتوحة')}: {open_count}</p>
                   <p>{t('Open error reports', 'تقارير الأخطاء المفتوحة')}: {open_errors}</p>
@@ -1230,9 +1262,20 @@ def render_settings(settings: dict) -> None:
                 st.caption(t("Feedback export is limited to supervisors and auditors.", "تصدير الملاحظات متاح للمشرفين والمدققين فقط."))
         if is_supervisor():
             st.markdown(f"### {t('Support Inbox', 'صندوق ملاحظات الدعم')}")
-            for item in list_feedback_items(limit=100):
-                with st.expander(f"{item['created_at_utc']} | {item['category']} | {item['status']} | {item['user_id']}"):
-                    st.write(mask_sensitive_text(item["message"], bool(settings.get("privacy_masking_enabled", True))))
+            feedback_cols = st.columns(2)
+            for idx, item in enumerate(list_feedback_items(limit=20)):
+                with feedback_cols[idx % 2]:
+                    st.markdown(
+                        f"""
+                        <div class="kb-setting-card">
+                          <h3>{item['category']} • {item['status']}</h3>
+                          <p><strong>{t('User', 'المستخدم')}:</strong> {item['user_id']}</p>
+                          <p><strong>{t('Created', 'تم الإنشاء')}:</strong> {item['created_at_utc']}</p>
+                          <p>{mask_sensitive_text(item['message'], bool(settings.get('privacy_masking_enabled', True)))}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                     if item["status"] == "open":
                         cols = st.columns(2)
                         if cols[0].button(t("Resolve", "إغلاق"), key=f"resolve_{item['feedback_id']}", use_container_width=True):
@@ -1244,9 +1287,20 @@ def render_settings(settings: dict) -> None:
                             append_audit_event(st.session_state["auth_user"], "review_feedback", "success", {"feedback_id": item["feedback_id"], "status": "open"})
                             st.rerun()
             st.markdown(f"### {t('Error Reporting Inbox', 'صندوق تقارير الأخطاء')}")
-            for item in list_error_reports(limit=100):
-                with st.expander(f"{item['created_at_utc']} | {item['source']} | {item['status']} | {item['user_id']}"):
-                    st.write(mask_sensitive_text(item["message"], bool(settings.get("privacy_masking_enabled", True))))
+            error_cols = st.columns(2)
+            for idx, item in enumerate(list_error_reports(limit=20)):
+                with error_cols[idx % 2]:
+                    st.markdown(
+                        f"""
+                        <div class="kb-setting-card">
+                          <h3>{item['source']} • {item['status']}</h3>
+                          <p><strong>{t('User', 'المستخدم')}:</strong> {item['user_id']}</p>
+                          <p><strong>{t('Created', 'تم الإنشاء')}:</strong> {item['created_at_utc']}</p>
+                          <p>{mask_sensitive_text(item['message'], bool(settings.get('privacy_masking_enabled', True)))}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                     if item["context"]:
                         st.json(item["context"])
                     if item["status"] == "open":
