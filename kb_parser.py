@@ -8,7 +8,10 @@ import subprocess
 import tempfile
 from typing import Iterable
 
-from pypdf import PdfReader
+try:
+    from PyPDF2 import PdfReader
+except ImportError:  # pragma: no cover - local fallback if only pypdf is installed
+    from pypdf import PdfReader
 
 HEADING_RE = re.compile(r"^(\d+(?:\.\d+)*)\s+.+")
 VISUAL_RE = re.compile(r"\b(figure|fig\.|chart|graph|diagram|image|table)\b", re.IGNORECASE)

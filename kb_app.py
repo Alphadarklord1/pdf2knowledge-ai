@@ -54,6 +54,7 @@ for key, default in {
     "workspace_search": "",
     "last_uploaded_filename": "",
     "latest_share": None,
+    "processing_status": "Ready",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -252,10 +253,23 @@ def render_topic_cards(draft: KBDraft, privacy_on: bool) -> None:
 
 def render_knowledge_map(analysis: DocumentAnalysis, privacy_on: bool) -> None:
     st.markdown(f"### {t('Knowledge Map', 'خريطة المعرفة')}")
-    lines = [mask_sensitive_text(analysis.knowledge_map.label, privacy_on)]
-    for child in analysis.knowledge_map.children:
-        lines.append(f"  ├── {mask_sensitive_text(child, privacy_on)}")
-    st.code("\n".join(lines), language=None)
+    root_label = mask_sensitive_text(analysis.knowledge_map.label, privacy_on)
+    child_markup = "".join(
+        f"<div class='kb-map-child'>{mask_sensitive_text(child, privacy_on)}</div>"
+        for child in analysis.knowledge_map.children
+    ) or f"<div class='kb-map-empty'>{t('No topic branches detected yet.', 'لم يتم اكتشاف فروع موضوعات بعد.')}</div>"
+    st.markdown(
+        f"""
+        <div class="kb-map-shell">
+          <div class="kb-map-root">{root_label}</div>
+          <div class="kb-map-connector"></div>
+          <div class="kb-map-children">
+            {child_markup}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_workspace(settings: dict) -> None:
@@ -290,48 +304,49 @@ def render_workspace(settings: dict) -> None:
         if secret_api_key and not openai_api_key:
             st.caption(t("Deployed OpenAI secret is configured and will be used automatically.", "تم إعداد سر OpenAI المنشور وسيتم استخدامه تلقائياً."))
 
-    parse_col, draft_col = st.columns(2)
-    if parse_col.button(t("Parse PDF", "تحليل PDF"), disabled=uploaded is None, use_container_width=True):
+    process_cols = st.columns([1.1, 0.9])
+    process_clicked = process_cols[0].button(
+        t("Process", "معالجة"),
+        disabled=uploaded is None,
+        use_container_width=True,
+    )
+    process_cols[1].metric(t("Processing status", "حالة المعالجة"), str(st.session_state.get("processing_status") or "Ready"))
+
+    if process_clicked:
         if uploaded is None:
             st.warning(t("Upload a PDF first.", "قم برفع ملف PDF أولاً."))
+            st.session_state["processing_status"] = "Ready"
         else:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp:
                 temp.write(uploaded.getvalue())
                 temp_path = Path(temp.name)
             try:
-                st.session_state["parse_result"] = parse_pdf(temp_path)
-                st.session_state["draft"] = None
-                st.session_state["kb_rag_result"] = None
-                st.session_state["last_uploaded_filename"] = uploaded.name
-                if settings.get("persist_uploaded_files"):
-                    shutil.copyfile(temp_path, OUTPUT_DIR / uploaded.name)
-                append_audit_event(st.session_state["auth_user"], "parse_pdf", "success", {"filename": uploaded.name})
-                st.success(t("PDF parsed and decomposed.", "تم تحليل ملف PDF وتقسيمه."))
-                st.rerun()
-            except Exception as exc:
-                append_audit_event(st.session_state["auth_user"], "parse_pdf", "failure", {"error": str(exc)})
-                st.error(f"{t('Parsing failed', 'فشل التحليل')}: {exc}")
-            finally:
-                temp_path.unlink(missing_ok=True)
-
-    if draft_col.button(t("Generate Knowledge Articles", "إنشاء المقالات المعرفية"), disabled=st.session_state.get("parse_result") is None, use_container_width=True):
-        parse_result = st.session_state.get("parse_result")
-        if parse_result is None:
-            st.warning(t("Parse a PDF first.", "حلل ملف PDF أولاً."))
-        else:
-            try:
-                st.session_state["draft"] = generate_kb_draft(
+                st.session_state["processing_status"] = "Extracting text"
+                parse_result = parse_pdf(temp_path)
+                st.session_state["processing_status"] = "Detecting topics"
+                draft = generate_kb_draft(
                     parse_result,
                     instruction,
                     openai_api_key=effective_api_key,
                     openai_model=openai_model or "gpt-4o-mini",
                 )
+                st.session_state["parse_result"] = parse_result
+                st.session_state["draft"] = draft
+                st.session_state["kb_rag_result"] = None
+                st.session_state["last_uploaded_filename"] = uploaded.name
+                if settings.get("persist_uploaded_files"):
+                    shutil.copyfile(temp_path, OUTPUT_DIR / uploaded.name)
+                append_audit_event(st.session_state["auth_user"], "parse_pdf", "success", {"filename": uploaded.name})
                 append_audit_event(st.session_state["auth_user"], "generate_draft", "success", {"llm_requested": bool(effective_api_key)})
-                st.success(t("Knowledge articles generated.", "تم إنشاء المقالات المعرفية."))
+                st.session_state["processing_status"] = "Completed"
+                st.success(t("PDF processed and knowledge articles generated.", "تمت معالجة ملف PDF وإنشاء المقالات المعرفية."))
                 st.rerun()
             except Exception as exc:
                 append_audit_event(st.session_state["auth_user"], "generate_draft", "failure", {"error": str(exc)})
-                st.error(f"{t('Draft generation failed', 'فشل إنشاء المسودة')}: {exc}")
+                st.session_state["processing_status"] = "Failed"
+                st.error(f"{t('Processing failed', 'فشلت المعالجة')}: {exc}")
+            finally:
+                temp_path.unlink(missing_ok=True)
 
     parse_result = st.session_state.get("parse_result")
     draft = st.session_state.get("draft")
@@ -452,6 +467,18 @@ def render_workspace(settings: dict) -> None:
                     render_topic_cards(filtered, privacy_on)
             else:
                 render_topic_cards(draft, privacy_on)
+            st.markdown(f"### {t('Generated Word Files', 'ملفات Word الناتجة')}")
+            for topic in split_draft_into_topic_documents(draft):
+                item_cols = st.columns([0.7, 0.3])
+                item_cols[0].markdown(f"**{mask_sensitive_text(topic.title, privacy_on)}.docx**")
+                item_cols[1].download_button(
+                    t("Download", "تنزيل"),
+                    data=export_topic_document_bytes(topic),
+                    file_name=f"{topic.topic_id}-{topic.title.lower().replace(' ', '-')[:50] or topic.topic_id}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key=f"generated_file_dl_{topic.topic_id}",
+                    use_container_width=True,
+                )
 
     with tabs[4]:
         st.markdown(f"### {t('Document RAG Assistant', 'مساعد الاسترجاع للوثيقة')}")
