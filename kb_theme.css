@@ -76,9 +76,19 @@ html, body, [data-testid="stAppViewContainer"] {
   display: inline-flex;
   gap: 1rem;
   flex-wrap: wrap;
-  color: var(--kb-muted);
   font-size: 0.9rem;
   font-weight: 500;
+}
+
+.kb-home-nav-link {
+  color: var(--kb-muted);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.kb-home-nav-link:hover,
+.kb-home-nav-link.active {
+  color: var(--kb-text);
 }
 
 .kb-home-nav-right {
@@ -270,6 +280,31 @@ html, body, [data-testid="stAppViewContainer"] {
   background: var(--kb-secondary-bg);
 }
 
+.kb-sidebar-brand {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  margin-bottom: 0.95rem;
+}
+
+.kb-sidebar-brand h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.kb-sidebar-brand p {
+  margin: 0.25rem 0 0;
+  color: var(--kb-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.kb-sidebar-logo {
+  width: 72px;
+  height: auto;
+  display: block;
+}
+
 .kb-page-header {
   margin-bottom: 1rem;
 }
@@ -297,8 +332,8 @@ html, body, [data-testid="stAppViewContainer"] {
 
 .kb-home-hero-copy h1 {
   margin: 0;
-  font-size: 2.6rem;
-  line-height: 1.05;
+  font-size: 2.7rem;
+  line-height: 1.02;
   color: var(--kb-text);
 }
 
@@ -416,6 +451,10 @@ html, body, [data-testid="stAppViewContainer"] {
   font-weight: 600;
 }
 
+.kb-topic-card {
+  min-height: 190px;
+}
+
 .kb-access-card {
   background: var(--kb-panel);
   border: 1px solid var(--kb-border);
@@ -520,6 +559,45 @@ html, body, [data-testid="stAppViewContainer"] {
   font-weight: 600;
 }
 
+[data-testid="stButton"] > button,
+[data-testid="stDownloadButton"] > button,
+[data-testid="stFormSubmitButton"] > button {
+  border-radius: 12px;
+  border: 1px solid var(--kb-border);
+  background: #ffffff;
+  color: var(--kb-text);
+  font-weight: 600;
+  min-height: 42px;
+}
+
+[data-testid="stButton"] > button[kind="primary"],
+[data-testid="stFormSubmitButton"] > button[kind="primary"] {
+  background: var(--kb-accent);
+  color: #ffffff;
+  border-color: var(--kb-accent);
+}
+
+[data-testid="stButton"] > button:hover,
+[data-testid="stDownloadButton"] > button:hover,
+[data-testid="stFormSubmitButton"] > button:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+}
+
+[data-testid="stButton"] > button:focus,
+[data-testid="stDownloadButton"] > button:focus,
+[data-testid="stFormSubmitButton"] > button:focus {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+[data-testid="stRadio"] label p {
+  font-size: 0.92rem;
+}
+
+[data-testid="stMetricValue"] {
+  color: var(--kb-text);
+}
+
 .kb-section-title {
   margin: 0.4rem 0 0.8rem;
   font-size: 1.2rem;
@@ -611,6 +689,11 @@ html, body, [data-testid="stAppViewContainer"] {
   .kb-home-hero-copy h1,
   .kb-hero h1 {
     font-size: 2rem;
+  }
+
+  .kb-sidebar-brand {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

@@ -236,16 +236,6 @@ def render_top_nav(status_label: str) -> None:
         """,
         unsafe_allow_html=True,
     )
-    nav_cols = st.columns(3)
-    if nav_cols[0].button(t("Dashboard", "لوحة التحكم"), use_container_width=True, key="topnav_home"):
-        st.session_state["selected_page"] = "home"
-        st.rerun()
-    if nav_cols[1].button(t("Process Document", "معالجة الوثيقة"), use_container_width=True, key="topnav_workspace"):
-        st.session_state["selected_page"] = "workspace"
-        st.rerun()
-    if nav_cols[2].button(t("Knowledge Articles", "المقالات المعرفية"), use_container_width=True, key="topnav_articles"):
-        st.session_state["selected_page"] = "articles"
-        st.rerun()
 
 
 def render_home_nav(authenticated: bool) -> None:
@@ -256,10 +246,10 @@ def render_home_nav(authenticated: bool) -> None:
           <div class="kb-home-nav-left">
             <span class="kb-topnav-title">{t('PDF2Knowledge AI', 'PDF2Knowledge AI')}</span>
             <span class="kb-home-nav-links">
-              <span>{t('Home', 'الرئيسية')}</span>
-              <span>{t('How It Works', 'كيف يعمل')}</span>
-              <span>{t('Demo', 'العرض')}</span>
-              <span>{t('About', 'حول')}</span>
+              <a class="kb-home-nav-link active" href="#home-top">{t('Home', 'الرئيسية')}</a>
+              <a class="kb-home-nav-link" href="#how-it-works">{t('How It Works', 'كيف يعمل')}</a>
+              <a class="kb-home-nav-link" href="#demo-output">{t('Demo', 'العرض')}</a>
+              <a class="kb-home-nav-link" href="#about-impact">{t('About', 'حول')}</a>
             </span>
           </div>
           <div class="kb-home-nav-right">{cta_label}</div>
@@ -296,7 +286,7 @@ def render_home(authenticated: bool) -> None:
     """
     st.markdown(
         f"""
-        <section class="kb-home-hero">
+        <section class="kb-home-hero" id="home-top">
           <div class="kb-home-hero-copy">
             <div class="kb-eyebrow">{t('AI for Enterprise Knowledge Management', 'ذكاء اصطناعي لإدارة المعرفة المؤسسية')}</div>
             <h1>{t('Turn Complex PDFs into Structured Knowledge', 'حوّل ملفات PDF المعقدة إلى معرفة منظمة')}</h1>
@@ -345,6 +335,7 @@ def render_home(authenticated: bool) -> None:
         f"<div class='kb-feature-card'><div class='kb-step-badge'>{step}</div><h3>{title}</h3><p>{body}</p></div>"
         for step, title, body in how_cards
     )
+    st.markdown("<div id='how-it-works'></div>", unsafe_allow_html=True)
     st.markdown(f"### {t('How It Works', 'كيف يعمل')}")
     st.markdown(f"<div class='kb-feature-grid'>{how_markup}</div>", unsafe_allow_html=True)
 
@@ -363,9 +354,11 @@ def render_home(authenticated: bool) -> None:
         """
         for title, summary, tags in example_cards
     )
+    st.markdown("<div id='demo-output'></div>", unsafe_allow_html=True)
     st.markdown(f"### {t('Generated Knowledge Articles', 'المقالات المعرفية الناتجة')}")
     st.markdown(f"<div class='kb-article-preview-grid'>{article_markup}</div>", unsafe_allow_html=True)
 
+    st.markdown("<div id='about-impact'></div>", unsafe_allow_html=True)
     st.markdown(f"### {t('Enterprise Impact', 'الأثر المؤسسي')}")
     impact_cols = st.columns([1.05, 0.95], vertical_alignment="top")
     with impact_cols[0]:
@@ -481,10 +474,19 @@ def logout() -> None:
 
 def sidebar_nav(settings: dict) -> str:
     with st.sidebar:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), use_container_width=True)
-        st.markdown(f"## {t('PDF2Knowledge AI', 'PDF2Knowledge AI')}")
-        st.caption(t("Structured PDF decomposition for KB teams", "تحليل PDF المنظم لفرق المعرفة"))
+        logo_uri = get_logo_data_uri()
+        st.markdown(
+            f"""
+            <div class="kb-sidebar-brand">
+              {f'<img class="kb-sidebar-logo" src="{logo_uri}" alt="PDF2Knowledge AI logo" />' if logo_uri else ''}
+              <div>
+                <h2>{t('PDF2Knowledge AI', 'PDF2Knowledge AI')}</h2>
+                <p>{t('Structured PDF decomposition for KB teams', 'تحليل PDF المنظم لفرق المعرفة')}</p>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         lang = st.radio(t("Language", "اللغة"), [("en", "English"), ("ar", "العربية")], format_func=lambda item: item[1], index=0 if not is_ar() else 1)
         st.session_state["ui_language"] = lang[0]
         st.divider()
