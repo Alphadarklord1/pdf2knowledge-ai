@@ -28,35 +28,70 @@ html, body, [data-testid="stAppViewContainer"] {
 }
 
 .block-container {
-  max-width: 1280px;
-  padding-top: 2rem;
+  max-width: 1180px;
+  padding-top: 1.25rem;
   padding-bottom: 3rem;
 }
 
 .kb-shell {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .kb-hero {
   background: var(--kb-panel);
   border: 1px solid var(--kb-border);
-  border-radius: 20px;
-  padding: 1.4rem 1.5rem;
-  box-shadow: 0 20px 40px rgba(13, 26, 38, 0.06);
+  border-radius: 28px;
+  padding: 1.6rem 1.7rem;
+  box-shadow: 0 24px 48px rgba(13, 26, 38, 0.08);
+}
+
+.kb-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.kb-hero-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100%;
+}
+
+.kb-hero-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.kb-hero-logo {
+  width: 160px;
+  max-width: 100%;
+  height: auto;
+  flex: 0 0 auto;
+}
+
+.kb-hero-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 .kb-hero h1 {
   margin: 0;
-  font-size: 2rem;
-  line-height: 1.2;
+  font-size: 2.35rem;
+  line-height: 1.05;
 }
 
 .kb-hero p {
   margin: 0.5rem 0 0;
   color: var(--kb-muted);
-  font-size: 0.98rem;
+  font-size: 1rem;
+  line-height: 1.55;
 }
 
 .kb-eyebrow {
@@ -74,7 +109,7 @@ html, body, [data-testid="stAppViewContainer"] {
 
 .kb-step-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.9rem;
 }
 
@@ -82,7 +117,7 @@ html, body, [data-testid="stAppViewContainer"] {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.9rem;
-  margin: 1rem 0 1.25rem;
+  margin: 1.15rem 0 1.25rem;
 }
 
 .kb-feature-card,
@@ -90,15 +125,19 @@ html, body, [data-testid="stAppViewContainer"] {
 .kb-page-header {
   background: var(--kb-panel);
   border: 1px solid var(--kb-border);
-  border-radius: 18px;
-  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  padding: 1.05rem 1.15rem;
   box-shadow: 0 10px 24px rgba(13, 26, 38, 0.04);
+}
+
+.kb-feature-card {
+  min-height: 132px;
 }
 
 .kb-feature-card h3,
 .kb-page-header h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.08rem;
 }
 
 .kb-feature-card p,
@@ -121,9 +160,15 @@ html, body, [data-testid="stAppViewContainer"] {
 .kb-step-card, .kb-topic-card, .kb-note-card {
   background: var(--kb-panel);
   border: 1px solid var(--kb-border);
-  border-radius: 18px;
-  padding: 1rem;
+  border-radius: 20px;
+  padding: 1rem 1.05rem;
   box-shadow: 0 10px 24px rgba(13, 26, 38, 0.04);
+}
+
+.kb-cta-note {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
 }
 
 .kb-step-state {
@@ -263,9 +308,19 @@ div[data-testid="stMetric"] {
   padding: 0.8rem 1rem;
 }
 
+div[data-testid="stMetric"] > div {
+  color: var(--kb-text);
+}
+
 div[data-testid="stDownloadButton"] button,
 button[kind="primary"], button[kind="secondary"] {
   border-radius: 12px !important;
+}
+
+button[kind="primary"] {
+  background: linear-gradient(135deg, #1565c0 0%, #0f4b8c 100%) !important;
+  color: #ffffff !important;
+  border: 0 !important;
 }
 
 .kb-right {
@@ -289,8 +344,17 @@ html[dir="rtl"] .kb-sidebar-card {
 }
 
 @media (max-width: 900px) {
-  .kb-step-grid, .kb-topic-grid, .kb-map-children, .kb-feature-grid {
+  .kb-hero-grid,
+  .kb-step-grid,
+  .kb-topic-grid,
+  .kb-map-children,
+  .kb-feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .kb-hero-brand {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .block-container {

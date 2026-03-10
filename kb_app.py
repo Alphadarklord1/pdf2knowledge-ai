@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
+import io
 from pathlib import Path
 import shutil
 import tempfile
 
 import streamlit as st
+from PIL import Image, ImageChops
 
 from kb_export import export_draft_to_docx_bytes, export_share_package_bytes, export_topic_bundle_zip_bytes, export_topic_document_bytes
 from kb_parser import get_ocr_tool_status, parse_pdf
@@ -115,35 +118,62 @@ def secret_value(name: str, default: str = "") -> str:
     return str(value or default)
 
 
+@st.cache_data(show_spinner=False)
+def get_logo_data_uri() -> str:
+    if not LOGO_PATH.exists():
+        return ""
+    image = Image.open(LOGO_PATH).convert("RGBA")
+    bg = Image.new("RGBA", image.size, (255, 255, 255, 255))
+    diff = ImageChops.difference(image, bg)
+    bbox = diff.getbbox()
+    if bbox:
+        image = image.crop(bbox)
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    encoded = base64.b64encode(output.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def hero_panel(parse_ready: bool, draft_ready: bool) -> None:
     step_states = [
         (t("Upload PDF", "رفع ملف PDF"), t("Collect one complex PDF and hand it to the local parser.", "تحميل ملف PDF معقد وتمريره إلى المحلل المحلي."), "done" if parse_ready else "active"),
         (t("AI Processing", "المعالجة بالذكاء الاصطناعي"), t("Detect sections, group topics, and build grounded KB drafts.", "اكتشاف الأقسام وتجميع الموضوعات وبناء مسودات معرفية موثقة."), "done" if draft_ready else ("active" if parse_ready else "pending")),
         (t("Generated Knowledge Articles", "المقالات المعرفية الناتجة"), t("Review topic cards and download editable Word documents.", "مراجعة بطاقات الموضوعات وتنزيل ملفات Word القابلة للتحرير."), "done" if draft_ready else "pending"),
     ]
-    hero_left, hero_right = st.columns([0.28, 0.72], vertical_alignment="center")
-    with hero_left:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), use_container_width=True)
-    with hero_right:
-        st.markdown(
-            f"""
-            <div class="kb-shell">
-              <section class="kb-hero">
-                <div class="kb-eyebrow">{t('Enterprise Knowledge Workflow', 'سير عمل المعرفة المؤسسية')}</div>
-                <h1>{t('PDF2Knowledge AI', 'PDF2Knowledge AI')}</h1>
-                <p>{t('Transforming Complex PDFs into Structured Knowledge Articles.', 'تحويل ملفات PDF المعقدة إلى مقالات معرفية منظمة.')}</p>
-              </section>
-              <section class="kb-step-grid">
-                {''.join(
-                    f'<div class="kb-step-card"><span class="kb-step-state {state}">{t("Complete", "مكتمل") if state == "done" else t("In Progress", "قيد التنفيذ") if state == "active" else t("Pending", "قيد الانتظار")}</span><h3>{title}</h3><p>{body}</p></div>'
-                    for title, body, state in step_states
-                )}
-              </section>
+    logo_markup = ""
+    logo_uri = get_logo_data_uri()
+    if logo_uri:
+        logo_markup = f'<img class="kb-hero-logo" src="{logo_uri}" alt="PDF2Knowledge AI logo" />'
+    st.markdown(
+        f"""
+        <div class="kb-shell">
+          <section class="kb-hero kb-hero-grid">
+            <div class="kb-hero-copy">
+              <div class="kb-eyebrow">{t('Enterprise Knowledge Workflow', 'سير عمل المعرفة المؤسسية')}</div>
+              <div class="kb-hero-brand">
+                {logo_markup}
+                <div>
+                  <h1>{t('PDF2Knowledge AI', 'PDF2Knowledge AI')}</h1>
+                  <p>{t('Transforming Complex PDFs into Structured Knowledge Articles.', 'تحويل ملفات PDF المعقدة إلى مقالات معرفية منظمة.')}</p>
+                </div>
+              </div>
+              <div class="kb-hero-points">
+                <span class="kb-chip">{t('Topic-based output', 'مخرجات مبنية على الموضوعات')}</span>
+                <span class="kb-chip">{t('Editable Word export', 'تصدير Word قابل للتحرير')}</span>
+                <span class="kb-chip">{t('Grounded retrieval', 'استرجاع موثق')}</span>
+              </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            <section class="kb-step-grid">
+              {''.join(
+                  f'<div class="kb-step-card"><span class="kb-step-state {state}">{t("Complete", "مكتمل") if state == "done" else t("In Progress", "قيد التنفيذ") if state == "active" else t("Pending", "قيد الانتظار")}</span><h3>{title}</h3><p>{body}</p></div>'
+                  for title, body, state in step_states
+              )}
+            </section>
+          </section>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def build_demo_analysis() -> DocumentAnalysis:
@@ -190,7 +220,7 @@ def render_home(authenticated: bool) -> None:
     hero_panel(parse_ready, draft_ready)
     demo_or_live = build_document_analysis(st.session_state["parse_result"], st.session_state["draft"]) if draft_ready else build_demo_analysis()
 
-    cta_cols = st.columns(3)
+    cta_cols = st.columns([1, 1, 1.2])
     if authenticated:
         if cta_cols[0].button(t("Go to Workspace", "الانتقال إلى مساحة العمل"), use_container_width=True):
             st.session_state["selected_page"] = "workspace"
@@ -207,7 +237,7 @@ def render_home(authenticated: bool) -> None:
         if cta_cols[1].button(t("Create Account", "إنشاء حساب"), use_container_width=True):
             st.session_state["home_auth_mode"] = "signup"
         cta_cols[2].markdown(
-            f"<div class='kb-note-card'><p>{t('Prototype-ready workflow for KB teams and judges.', 'سير عمل جاهز للنموذج الأولي لفرق المعرفة ولجنة التحكيم.')}</p></div>",
+            f"<div class='kb-note-card kb-cta-note'><p>{t('Built for KB teams, internal demos, and judge reviews.', 'مصمم لفرق المعرفة والعروض الداخلية ومراجعات التحكيم.')}</p></div>",
             unsafe_allow_html=True,
         )
 
@@ -219,19 +249,17 @@ def render_home(authenticated: bool) -> None:
         (t("Grounded Q&A", "أسئلة وأجوبة موثقة"), t("Answer questions with evidence from the uploaded document only.", "الإجابة عن الأسئلة بالاعتماد على أدلة من الوثيقة المرفوعة فقط.")),
         (t("Scan Assist", "مساعد المسح"), t("Flag scan-heavy pages and OCR readiness before final generation.", "تنبيه الصفحات المعتمدة على المسح وحالة OCR قبل التوليد النهائي.")),
     ]
-    st.markdown("<div class='kb-feature-grid'>", unsafe_allow_html=True)
-    for title, body in feature_cards:
-        st.markdown(
-            f"<div class='kb-feature-card'><h3>{title}</h3><p>{body}</p></div>",
-            unsafe_allow_html=True,
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
+    feature_markup = "".join(
+        f"<div class='kb-feature-card'><h3>{title}</h3><p>{body}</p></div>"
+        for title, body in feature_cards
+    )
+    st.markdown(f"<div class='kb-feature-grid'>{feature_markup}</div>", unsafe_allow_html=True)
 
     metric_cols = st.columns(3)
     metric_cols[0].metric(t("Topics detected", "الموضوعات المكتشفة"), demo_or_live.topics_detected)
     metric_cols[1].metric(t("Knowledge articles generated", "المقالات المعرفية الناتجة"), demo_or_live.knowledge_articles_generated)
     metric_cols[2].metric(t("Confidence score", "درجة الثقة"), f"{demo_or_live.confidence_score}%")
-    map_cols = st.columns([1.05, 0.95])
+    map_cols = st.columns([0.95, 1.05], vertical_alignment="top")
     with map_cols[0]:
         render_page_header(
             t("Homepage Overview", "نظرة عامة"),
@@ -270,7 +298,7 @@ def render_home(authenticated: bool) -> None:
                     st.session_state["auth_user"] = user["user_id"]
                     st.session_state["auth_role"] = user["role"]
                     st.session_state["auth_display_name"] = user["display_name"]
-                    st.session_state["selected_page"] = "home"
+                    st.session_state["selected_page"] = "workspace"
                     append_audit_event(user["user_id"], "login", "success", {"role": user["role"]})
                     st.rerun()
             with st.expander(t("Demo accounts", "حسابات العرض")):
@@ -300,6 +328,7 @@ def logout() -> None:
     st.session_state["parse_result"] = None
     st.session_state["draft"] = None
     st.session_state["latest_share"] = None
+    st.session_state["home_auth_mode"] = "signin"
     st.session_state["selected_page"] = "home"
     st.rerun()
 
