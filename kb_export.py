@@ -9,6 +9,11 @@ from docx import Document
 from kb_pipeline import KBDraft, TopicDocument, split_draft_into_topic_documents
 
 
+def _safe_topic_filename(topic: TopicDocument) -> str:
+    safe_name = topic.title.lower().replace(" ", "-")[:50] or topic.topic_id
+    return f"{topic.topic_id}-{safe_name}.docx"
+
+
 def export_draft_to_docx_bytes(draft: KBDraft) -> bytes:
     document = Document()
     document.add_heading(draft.title, level=0)
@@ -46,8 +51,7 @@ def export_topic_bundle_zip_bytes(draft: KBDraft) -> bytes:
         archive.writestr("master-kb-draft.docx", export_draft_to_docx_bytes(draft))
         for topic in split_draft_into_topic_documents(draft):
             topic_doc = export_topic_document_bytes(topic)
-            safe_name = topic.title.lower().replace(" ", "-")[:50] or topic.topic_id
-            archive.writestr(f"{safe_name}.docx", topic_doc)
+            archive.writestr(_safe_topic_filename(topic), topic_doc)
     return buffer.getvalue()
 
 
@@ -79,6 +83,5 @@ def export_share_package_bytes(draft: KBDraft, share_code: str, *, share_note: s
         archive.writestr("share-manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         archive.writestr("master-kb-draft.docx", export_draft_to_docx_bytes(draft))
         for topic in topic_docs:
-            safe_name = topic.title.lower().replace(" ", "-")[:50] or topic.topic_id
-            archive.writestr(f"topics/{safe_name}.docx", export_topic_document_bytes(topic))
+            archive.writestr(f"topics/{_safe_topic_filename(topic)}", export_topic_document_bytes(topic))
     return buffer.getvalue()

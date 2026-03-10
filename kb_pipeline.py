@@ -108,7 +108,12 @@ def _local_draft(parse_result: ParseResult, instruction: str) -> KBDraft:
         if idx <= 2 and snippet:
             summary_parts.append(snippet)
         visual_notes.extend(f"{item} [p{','.join(map(str, section.page_numbers))}]" for item in section.visual_references)
+        visual_notes.extend(f"{item.label}: {item.caption}" for item in section.visual_candidates)
         table_notes.extend(f"{item} [p{','.join(map(str, section.page_numbers))}]" for item in section.table_like_lines)
+        for table in section.structured_tables:
+            rendered_rows = [" | ".join(row) for row in table.rows[:5]]
+            if rendered_rows:
+                table_notes.append(f"{table.heading}: {' ; '.join(rendered_rows)}")
         draft_sections.append(
             DraftSection(
                 heading=section.heading,

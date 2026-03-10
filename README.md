@@ -16,6 +16,7 @@ A separate MVP project for the Knowledge Base PDF decomposition challenge.
 - Export a `.zip` bundle with one topic document per detected topic
 - Generate internal share packages with share codes and handoff metadata
 - Show scan-readiness guidance inspired by mobile document-scanning workflows
+- Run local OCR on scan-heavy pages when `tesseract` and `pdftoppm` are installed
 - Require sign-in with local accounts and approval-based public signup
 - Provide privacy masking, audit events, supervisor account administration, and a support inbox
 
@@ -52,9 +53,17 @@ openai_model = "gpt-4o-mini"
 
 - If `openai_api_key` is configured in Streamlit secrets, the app will use it automatically when the user leaves the API key field blank.
 
+## OCR dependencies
+- Prototype baseline: works without OCR for text-based PDFs
+- Scanned-PDF OCR path requires local system tools:
+  - `tesseract`
+  - `pdftoppm`
+- If those tools are missing, the app stays usable and shows OCR-unavailable warnings instead of failing
+
 ## Current MVP boundaries
 - Best with text-based PDFs
 - Scanned/image-only PDFs will likely need OCR, which is not included in this first pass
+- Local OCR is supported only when the required system tools are installed
 - Table and visual handling is heuristic in this MVP
 - `.docx` and topic bundle export are supported
 - Document RAG is grounded to extracted sections, so poor extraction quality will limit answer quality

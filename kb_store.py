@@ -51,6 +51,11 @@ def connect_db() -> sqlite3.Connection:
     return conn
 
 
+def _column_exists(conn: sqlite3.Connection, table_name: str, column_name: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return any(str(row["name"]) == column_name for row in rows)
+
+
 def init_db() -> None:
     with connect_db() as conn:
         conn.executescript(
@@ -100,10 +105,13 @@ def init_db() -> None:
               share_code TEXT NOT NULL,
               title TEXT NOT NULL,
               share_note TEXT NOT NULL,
-              source_filename TEXT NOT NULL
+              source_filename TEXT NOT NULL,
+              payload_zip BLOB
             );
             """
         )
+        if not _column_exists(conn, "share_items", "payload_zip"):
+            conn.execute("ALTER TABLE share_items ADD COLUMN payload_zip BLOB")
         for key, value in DEFAULT_SETTINGS.items():
             conn.execute(
                 "INSERT OR IGNORE INTO app_settings(key, value_json, updated_at_utc) VALUES (?, ?, ?)",
@@ -173,6 +181,11 @@ def create_signup_user(user_id: str, display_name: str, password: str) -> tuple[
         )
     append_audit_event(user_id, "register", "pending", {"role": "operator"})
     return True, "Account created and waiting for supervisor approval."
+
+
+def require_role(role: str, allowed: tuple[str, ...]) -> None:
+    if role not in allowed:
+        raise PermissionError(f"Role {role} is not permitted for this action.")
 
 
 def list_users() -> list[dict[str, Any]]:
@@ -277,9 +290,13 @@ def export_feedback_jsonl(limit: int = 500) -> bytes:
     return payload.encode("utf-8")
 
 
-def create_share_item(user_id: str, title: str, *, share_note: str = "", source_filename: str = "") -> dict[str, Any]:
+def generate_share_code() -> str:
+    return uuid.uuid4().hex[:8].upper()
+
+
+def create_share_item(user_id: str, title: str, *, share_note: str = "", source_filename: str = "", payload_zip: bytes, share_code: str | None = None) -> dict[str, Any]:
     share_id = str(uuid.uuid4())
-    share_code = uuid.uuid4().hex[:8].upper()
+    share_code = share_code or generate_share_code()
     item = {
         "share_id": share_id,
         "created_at_utc": utc_now(),
@@ -292,8 +309,8 @@ def create_share_item(user_id: str, title: str, *, share_note: str = "", source_
     with connect_db() as conn:
         conn.execute(
             """
-            INSERT INTO share_items(share_id, created_at_utc, user_id, share_code, title, share_note, source_filename)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO share_items(share_id, created_at_utc, user_id, share_code, title, share_note, source_filename, payload_zip)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["share_id"],
@@ -303,6 +320,7 @@ def create_share_item(user_id: str, title: str, *, share_note: str = "", source_
                 item["title"],
                 item["share_note"],
                 item["source_filename"],
+                sqlite3.Binary(payload_zip),
             ),
         )
     append_audit_event(user_id, "create_share", "success", {"share_code": share_code, "title": item["title"]})
@@ -313,7 +331,7 @@ def list_share_items(limit: int = 100) -> list[dict[str, Any]]:
     with connect_db() as conn:
         rows = conn.execute(
             """
-            SELECT share_id, created_at_utc, user_id, share_code, title, share_note, source_filename
+            SELECT share_id, created_at_utc, user_id, share_code, title, share_note, source_filename, LENGTH(payload_zip) AS payload_size
             FROM share_items
             ORDER BY created_at_utc DESC
             LIMIT ?
@@ -321,3 +339,12 @@ def list_share_items(limit: int = 100) -> list[dict[str, Any]]:
             (limit,),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_share_payload(share_id: str) -> bytes | None:
+    with connect_db() as conn:
+        row = conn.execute("SELECT payload_zip FROM share_items WHERE share_id = ?", (share_id,)).fetchone()
+    if row is None:
+        return None
+    value = row["payload_zip"]
+    return bytes(value) if value is not None else None

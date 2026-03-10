@@ -21,3 +21,7 @@ openai_model = "gpt-4o-mini"
 - The app works without OpenAI. In that mode it uses local extraction, local drafting heuristics, and local TF-IDF retrieval.
 - If `openai_api_key` is configured in secrets, users can leave the UI key field blank and the deployed app will use the secret automatically.
 - Keep `kb_app.db` and `.streamlit/secrets.toml` out of source control.
+- For scanned PDF OCR, the host must also provide:
+  - `tesseract`
+  - `pdftoppm`
+- If OCR tools are missing, deployment still works; scanned pages will show warnings instead of OCR output.

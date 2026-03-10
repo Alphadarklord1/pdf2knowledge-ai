@@ -10,6 +10,8 @@ from kb_store import (
     authenticate_user,
     create_share_item,
     create_signup_user,
+    generate_share_code,
+    get_share_payload,
     init_db,
     list_feedback_items,
     list_share_items,
@@ -119,8 +121,23 @@ def test_share_package_creation_and_export() -> None:
         total_visual_references=0,
     )
     draft = generate_kb_draft(parse_result, "Create KB articles.")
-    share_item = create_share_item("kb_admin", draft.title, share_note="Share with reviewers", source_filename="sample.pdf")
+    payload = export_share_package_bytes(draft, "ABCD1234", share_note="Share with reviewers", source_filename="sample.pdf")
+    share_item = create_share_item(
+        "kb_admin",
+        draft.title,
+        share_note="Share with reviewers",
+        source_filename="sample.pdf",
+        payload_zip=payload,
+        share_code="ABCD1234",
+    )
     assert share_item["share_code"]
     assert any(item["share_id"] == share_item["share_id"] for item in list_share_items(limit=20))
-    payload = export_share_package_bytes(draft, share_item["share_code"], share_note="Share with reviewers", source_filename="sample.pdf")
+    stored_payload = get_share_payload(share_item["share_id"])
+    assert stored_payload == payload
     assert payload[:2] == b"PK"
+
+
+def test_generate_share_code_is_uppercase_and_short() -> None:
+    code = generate_share_code()
+    assert len(code) == 8
+    assert code == code.upper()

@@ -7,7 +7,7 @@ import tempfile
 import streamlit as st
 
 from kb_export import export_draft_to_docx_bytes, export_share_package_bytes, export_topic_bundle_zip_bytes, export_topic_document_bytes
-from kb_parser import parse_pdf
+from kb_parser import get_ocr_tool_status, parse_pdf
 from kb_pipeline import KBDraft, generate_kb_draft, split_draft_into_topic_documents
 from kb_privacy import mask_sensitive_text
 from kb_rag import answer_question as answer_document_question
@@ -17,7 +17,9 @@ from kb_store import (
     create_share_item,
     create_signup_user,
     export_feedback_jsonl,
+    generate_share_code,
     get_settings,
+    get_share_payload,
     init_db,
     list_audit_events,
     list_feedback_items,
@@ -86,6 +88,18 @@ def current_settings() -> dict:
     return get_settings()
 
 
+def current_role() -> str:
+    return str(st.session_state.get("auth_role") or "")
+
+
+def is_supervisor() -> bool:
+    return current_role() == "supervisor"
+
+
+def is_privileged_reader() -> bool:
+    return current_role() in {"supervisor", "auditor"}
+
+
 def secret_value(name: str, default: str = "") -> str:
     try:
         value = st.secrets.get(name, default)
@@ -130,8 +144,8 @@ def login_screen() -> None:
     login_tab, signup_tab = st.tabs([t("Sign In", "تسجيل الدخول"), t("Create Account", "إنشاء حساب")])
     with login_tab:
         with st.form("login_form"):
-            user_id = st.text_input(t("User ID", "معرف المستخدم"), value="kb_admin")
-            password = st.text_input(t("Password", "كلمة المرور"), type="password", value="Admin@123")
+            user_id = st.text_input(t("User ID", "معرف المستخدم"), value="")
+            password = st.text_input(t("Password", "كلمة المرور"), type="password", value="")
             submitted = st.form_submit_button(t("Sign In", "تسجيل الدخول"), use_container_width=True)
         if submitted:
             user = authenticate_user(user_id, password)
@@ -144,7 +158,10 @@ def login_screen() -> None:
                 st.session_state["auth_display_name"] = user["display_name"]
                 append_audit_event(user["user_id"], "login", "success", {"role": user["role"]})
                 st.rerun()
-        st.info(t("Demo accounts: kb_admin / Admin@123, kb_reviewer / Reviewer@123, kb_auditor / Auditor@123", "حسابات العرض: kb_admin / Admin@123، و kb_reviewer / Reviewer@123، و kb_auditor / Auditor@123"))
+        with st.expander(t("Demo accounts", "حسابات العرض")):
+            st.write("kb_admin / Admin@123")
+            st.write("kb_reviewer / Reviewer@123")
+            st.write("kb_auditor / Auditor@123")
     with signup_tab:
         with st.form("signup_form"):
             new_user_id = st.text_input(t("Requested user ID", "معرف المستخدم المطلوب"))
@@ -167,6 +184,7 @@ def logout() -> None:
     st.session_state["auth_display_name"] = None
     st.session_state["parse_result"] = None
     st.session_state["draft"] = None
+    st.session_state["latest_share"] = None
     st.rerun()
 
 
@@ -182,11 +200,17 @@ def sidebar_nav(settings: dict) -> str:
         st.write(f"**{t('User', 'المستخدم')}:** {st.session_state['auth_display_name']}")
         st.write(f"**{t('Role', 'الدور')}:** {st.session_state['auth_role']}")
         st.write(f"**{t('Privacy Masking', 'إخفاء البيانات')}:** {t('On', 'مفعل') if settings['privacy_masking_enabled'] else t('Off', 'معطل')}")
+        nav_items = [("workspace", t("Workspace", "مساحة العمل")), ("settings", t("Settings", "الإعدادات"))]
+        if is_privileged_reader():
+            nav_items.append(("audit", t("Audit", "التدقيق")))
+        selected_page = st.session_state.get("selected_page", "workspace")
+        if selected_page == "audit" and not is_privileged_reader():
+            selected_page = "workspace"
         selected = st.radio(
             t("Navigation", "التنقل"),
-            [("workspace", t("Workspace", "مساحة العمل")), ("settings", t("Settings", "الإعدادات")), ("audit", t("Audit", "التدقيق"))],
+            nav_items,
             format_func=lambda item: item[1],
-            index=["workspace", "settings", "audit"].index(st.session_state.get("selected_page", "workspace")),
+            index=[item[0] for item in nav_items].index(selected_page),
         )
         st.session_state["selected_page"] = selected[0]
         if st.button(t("Sign Out", "تسجيل الخروج"), use_container_width=True):
@@ -305,6 +329,10 @@ def render_workspace(settings: dict) -> None:
     metric_cols[1].metric(t("Detected Sections", "الأقسام المكتشفة"), len(parse_result.sections))
     metric_cols[2].metric(t("Table-like lines", "أسطر شبيهة بالجداول"), parse_result.total_tables)
     metric_cols[3].metric(t("Visual refs", "الإشارات البصرية"), parse_result.total_visual_references)
+    status_cols = st.columns(3)
+    status_cols[0].metric(t("OCR Pages", "صفحات OCR"), parse_result.ocr_pages)
+    status_cols[1].metric(t("Images", "الصور"), parse_result.total_images)
+    status_cols[2].metric(t("OCR Engine", "محرك OCR"), t("Ready", "جاهز") if parse_result.ocr_available else t("Unavailable", "غير متاح"))
     search_query = st.text_input(
         t("Search detected sections and generated topics", "ابحث في الأقسام المكتشفة والموضوعات الناتجة"),
         value=st.session_state.get("workspace_search", ""),
@@ -349,6 +377,10 @@ def render_workspace(settings: dict) -> None:
         for page in parse_result.pages:
             with st.expander(f"{t('Page', 'صفحة')} {page.page_number}"):
                 st.text(mask_sensitive_text(page.text or "<no extractable text>", privacy_on))
+                st.caption(
+                    f"{t('Quality', 'الجودة')}: {page.extraction_quality} | "
+                    f"{t('OCR used', 'تم استخدام OCR')}: {t('Yes', 'نعم') if page.ocr_used else t('No', 'لا')}"
+                )
 
     with tabs[2]:
         if draft is None:
@@ -446,8 +478,11 @@ def render_workspace(settings: dict) -> None:
                 st.write(f"**{t('Extracted text characters', 'عدد أحرف النص المستخرج')}**: {page.text_char_count}")
                 st.write(f"**{t('Embedded images', 'الصور المضمنة')}**: {page.image_count}")
                 st.write(f"**{t('Recommended scan mode', 'وضع المسح الموصى به')}**: {mode_label}")
+                st.write(f"**{t('Extraction quality', 'جودة الاستخراج')}**: {page.extraction_quality}")
                 if page.likely_scanned:
                     st.caption(t("This page likely came from an image-heavy scan and may benefit from OCR or mobile scan cleanup.", "هذه الصفحة تبدو معتمدة على مسح كثيف الصور وقد تستفيد من OCR أو تحسينات المسح عبر الهاتف."))
+                if page.ocr_warning:
+                    st.caption(page.ocr_warning)
 
     with tabs[5]:
         if draft is None:
@@ -477,17 +512,27 @@ def render_workspace(settings: dict) -> None:
                     key="share_note",
                 )
                 if st.button(t("Create Share Package", "إنشاء حزمة مشاركة"), use_container_width=True):
+                    share_code = generate_share_code()
+                    payload = export_share_package_bytes(
+                        draft,
+                        share_code,
+                        share_note=share_note,
+                        source_filename=st.session_state.get("last_uploaded_filename", ""),
+                    )
                     share_item = create_share_item(
                         st.session_state["auth_user"],
                         draft.title,
                         share_note=share_note,
                         source_filename=st.session_state.get("last_uploaded_filename", ""),
+                        payload_zip=payload,
+                        share_code=share_code,
                     )
                     st.session_state["latest_share"] = share_item
                     st.rerun()
             with share_cols[1]:
                 latest_share = st.session_state.get("latest_share")
                 if latest_share:
+                    latest_payload = get_share_payload(latest_share["share_id"])
                     st.markdown(
                         f"""
                         <div class="kb-note-card">
@@ -500,15 +545,11 @@ def render_workspace(settings: dict) -> None:
                     )
                     st.download_button(
                         t("Download Share Package", "تنزيل حزمة المشاركة"),
-                        data=export_share_package_bytes(
-                            draft,
-                            latest_share["share_code"],
-                            share_note=latest_share.get("share_note", ""),
-                            source_filename=latest_share.get("source_filename", ""),
-                        ),
+                        data=latest_payload or b"",
                         file_name=f"share-{latest_share['share_code'].lower()}.zip",
                         mime="application/zip",
                         use_container_width=True,
+                        disabled=latest_payload is None,
                     )
             action_cols = st.columns(2)
             action_cols[0].download_button(
@@ -534,6 +575,16 @@ def render_workspace(settings: dict) -> None:
                         st.write(f"{t('Created by', 'أنشأها')}: {item['user_id']}")
                         st.write(f"{t('Source file', 'الملف المصدر')}: {item['source_filename'] or '-'}")
                         st.write(mask_sensitive_text(item["share_note"], privacy_on))
+                        item_payload = get_share_payload(item["share_id"])
+                        st.download_button(
+                            t("Download Snapshot", "تنزيل اللقطة"),
+                            data=item_payload or b"",
+                            file_name=f"share-{item['share_code'].lower()}.zip",
+                            mime="application/zip",
+                            use_container_width=True,
+                            disabled=item_payload is None,
+                            key=f"share_dl_{item['share_id']}",
+                        )
 
 
 def render_settings(settings: dict) -> None:
@@ -547,15 +598,17 @@ def render_settings(settings: dict) -> None:
     left, right = st.columns(2)
     with left:
         st.subheader(t("Privacy & Security", "الخصوصية والأمان"))
-        masking_enabled = st.toggle(t("Mask emails, phone numbers, and long IDs in the UI", "إخفاء البريد الإلكتروني وأرقام الهاتف والمعرفات الطويلة في الواجهة"), value=bool(settings.get("privacy_masking_enabled", True)))
-        allow_openai = st.toggle(t("Allow optional OpenAI draft enhancement", "السماح بتحسين المسودات عبر OpenAI بشكل اختياري"), value=bool(settings.get("allow_openai_enhancement", True)))
-        persist_files = st.toggle(t("Persist uploaded PDFs after parsing", "الاحتفاظ بملفات PDF المرفوعة بعد التحليل"), value=bool(settings.get("persist_uploaded_files", False)))
+        can_edit_settings = is_supervisor()
+        masking_enabled = st.toggle(t("Mask emails, phone numbers, and long IDs in the UI", "إخفاء البريد الإلكتروني وأرقام الهاتف والمعرفات الطويلة في الواجهة"), value=bool(settings.get("privacy_masking_enabled", True)), disabled=not can_edit_settings)
+        allow_openai = st.toggle(t("Allow optional OpenAI draft enhancement", "السماح بتحسين المسودات عبر OpenAI بشكل اختياري"), value=bool(settings.get("allow_openai_enhancement", True)), disabled=not can_edit_settings)
+        persist_files = st.toggle(t("Persist uploaded PDFs after parsing", "الاحتفاظ بملفات PDF المرفوعة بعد التحليل"), value=bool(settings.get("persist_uploaded_files", False)), disabled=not can_edit_settings)
         release_stage = st.selectbox(
             t("Release stage", "مرحلة الإصدار"),
             ["beta", "pilot", "internal"],
             index=["beta", "pilot", "internal"].index(str(settings.get("release_stage", "beta"))),
+            disabled=not can_edit_settings,
         )
-        if st.button(t("Save Settings", "حفظ الإعدادات"), use_container_width=True):
+        if can_edit_settings and st.button(t("Save Settings", "حفظ الإعدادات"), use_container_width=True):
             set_setting("privacy_masking_enabled", masking_enabled)
             set_setting("allow_openai_enhancement", allow_openai)
             set_setting("persist_uploaded_files", persist_files)
@@ -563,6 +616,8 @@ def render_settings(settings: dict) -> None:
             append_audit_event(st.session_state["auth_user"], "save_settings", "success", {"privacy_masking_enabled": masking_enabled, "allow_openai_enhancement": allow_openai, "persist_uploaded_files": persist_files, "release_stage": release_stage})
             st.success(t("Settings saved.", "تم حفظ الإعدادات."))
             st.rerun()
+        if not can_edit_settings:
+            st.info(t("Global settings are supervisor-managed in this prototype.", "الإعدادات العامة تدار من قبل المشرف في هذا النموذج الأولي."))
     with right:
         st.subheader(t("Enterprise Design Notes", "ملاحظات التصميم المؤسسي"))
         st.markdown(f"- {t('Minimal dashboard workflow: Upload PDF → AI Processing → Generated Knowledge Articles.', 'سير عمل بسيط: رفع PDF ← المعالجة بالذكاء الاصطناعي ← المقالات المعرفية الناتجة.')}" )
@@ -570,6 +625,8 @@ def render_settings(settings: dict) -> None:
         st.markdown(f"- {t('Card-based topic articles for fast scanning and Word download.', 'بطاقات موضوعات لتسهيل المسح السريع وتنزيل ملفات Word.')}" )
         st.markdown(f"- {t('Privacy masking is enabled by default for enterprise review usage.', 'إخفاء البيانات مفعّل افتراضياً لمراجعة مؤسسية أكثر أماناً.')}" )
         st.markdown(f"- {t('Document search and grounded Q&A are available after parsing.', 'البحث في الوثيقة والأسئلة الموثقة متاحان بعد التحليل.')}")
+        ocr_status = get_ocr_tool_status()
+        st.markdown(f"- {t('OCR toolchain status', 'حالة أداة OCR')}: {ocr_status['message']}")
 
     st.subheader(t("Support Feedback", "ملاحظات الدعم"))
     fb_left, fb_right = st.columns([1.2, 0.8])
@@ -601,15 +658,18 @@ def render_settings(settings: dict) -> None:
         </div>
         """
         st.markdown(status_card, unsafe_allow_html=True)
-        st.download_button(
-            t("Export Feedback JSONL", "تصدير الملاحظات JSONL"),
-            data=export_feedback_jsonl(),
-            file_name="feedback-export.jsonl",
-            mime="application/json",
-            use_container_width=True,
-        )
+        if is_privileged_reader():
+            st.download_button(
+                t("Export Feedback JSONL", "تصدير الملاحظات JSONL"),
+                data=export_feedback_jsonl(),
+                file_name="feedback-export.jsonl",
+                mime="application/json",
+                use_container_width=True,
+            )
+        else:
+            st.caption(t("Feedback export is limited to supervisors and auditors.", "تصدير الملاحظات متاح للمشرفين والمدققين فقط."))
 
-    if st.session_state.get("auth_role") == "supervisor":
+    if is_supervisor():
         st.subheader(t("Account Administration", "إدارة الحسابات"))
         users = list_users()
         for entry in users:
@@ -647,6 +707,9 @@ def render_settings(settings: dict) -> None:
 
 
 def render_audit() -> None:
+    if not is_privileged_reader():
+        st.error(t("Audit access is limited to supervisors and auditors.", "الوصول إلى التدقيق متاح للمشرفين والمدققين فقط."))
+        return
     st.markdown(f"## {t('Audit', 'التدقيق')}")
     st.caption(t("Recent account, parsing, generation, export, and settings events.", "أحدث أحداث الحسابات والتحليل والتوليد والتصدير والإعدادات."))
     events = list_audit_events()
