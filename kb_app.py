@@ -248,77 +248,180 @@ def render_top_nav(status_label: str) -> None:
         st.rerun()
 
 
+def render_home_nav(authenticated: bool) -> None:
+    cta_label = t("Try Prototype", "جرّب النموذج")
+    st.markdown(
+        f"""
+        <div class="kb-home-nav">
+          <div class="kb-home-nav-left">
+            <span class="kb-topnav-title">{t('PDF2Knowledge AI', 'PDF2Knowledge AI')}</span>
+            <span class="kb-home-nav-links">
+              <span>{t('Home', 'الرئيسية')}</span>
+              <span>{t('How It Works', 'كيف يعمل')}</span>
+              <span>{t('Demo', 'العرض')}</span>
+              <span>{t('About', 'حول')}</span>
+            </span>
+          </div>
+          <div class="kb-home-nav-right">{cta_label}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    cta_cols = st.columns([4, 1.2])
+    cta_cols[0].markdown(
+        f"<div class='kb-home-nav-caption'>{t('AI product landing page for internal knowledge teams.', 'صفحة منتج بالذكاء الاصطناعي لفرق المعرفة الداخلية.')}</div>",
+        unsafe_allow_html=True,
+    )
+    if cta_cols[1].button(cta_label, use_container_width=True, key="home_nav_cta"):
+        st.session_state["selected_page"] = "workspace" if authenticated else "home"
+        if not authenticated:
+            st.session_state["home_auth_mode"] = "signin"
+        st.rerun()
+
+
 def render_home(authenticated: bool) -> None:
-    parse_ready = st.session_state.get("parse_result") is not None
     draft_ready = st.session_state.get("draft") is not None
-    hero_panel(parse_ready, draft_ready)
+    render_home_nav(authenticated)
     demo_or_live = build_document_analysis(st.session_state["parse_result"], st.session_state["draft"]) if draft_ready else build_demo_analysis()
 
-    cta_cols = st.columns([1, 1, 1.2])
+    logo_uri = get_logo_data_uri()
+    workflow_diagram = f"""
+    <div class="kb-flow-visual">
+      <div class="kb-flow-node">PDF</div>
+      <div class="kb-flow-arrow">→</div>
+      <div class="kb-flow-node">{t('AI Analysis', 'تحليل الذكاء الاصطناعي')}</div>
+      <div class="kb-flow-arrow">→</div>
+      <div class="kb-flow-node">{t('Knowledge Articles', 'المقالات المعرفية')}</div>
+    </div>
+    """
+    st.markdown(
+        f"""
+        <section class="kb-home-hero">
+          <div class="kb-home-hero-copy">
+            <div class="kb-eyebrow">{t('AI for Enterprise Knowledge Management', 'ذكاء اصطناعي لإدارة المعرفة المؤسسية')}</div>
+            <h1>{t('Turn Complex PDFs into Structured Knowledge', 'حوّل ملفات PDF المعقدة إلى معرفة منظمة')}</h1>
+            <p>{t('AI automatically analyzes large documents and converts them into organized knowledge articles ready for enterprise knowledge bases.', 'يقوم الذكاء الاصطناعي بتحليل الوثائق الكبيرة وتحويلها إلى مقالات معرفية منظمة جاهزة لقواعد المعرفة المؤسسية.')}</p>
+            <div class="kb-home-cta-row">
+              <span class="kb-chip">{t('Account sign-in supported', 'يدعم تسجيل الدخول بالحساب')}</span>
+              <span class="kb-chip">{t('Supervisor approval for new accounts', 'موافقة المشرف للحسابات الجديدة')}</span>
+            </div>
+          </div>
+          <div class="kb-home-hero-visual">
+            {f'<img class="kb-home-hero-logo" src="{logo_uri}" alt="PDF2Knowledge AI logo" />' if logo_uri else ''}
+            {workflow_diagram}
+          </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    hero_cta_cols = st.columns([1, 1, 1.2])
     if authenticated:
-        if cta_cols[0].button(t("Go to Workspace", "الانتقال إلى مساحة العمل"), use_container_width=True):
+        if hero_cta_cols[0].button(t("Open Workspace", "فتح مساحة العمل"), use_container_width=True):
             st.session_state["selected_page"] = "workspace"
             st.rerun()
-        if cta_cols[1].button(t("Go to Knowledge Articles", "الانتقال إلى المقالات"), use_container_width=True):
+        if hero_cta_cols[1].button(t("Open Articles", "فتح المقالات"), use_container_width=True):
             st.session_state["selected_page"] = "articles"
             st.rerun()
-        if cta_cols[2].button(t("Go to Ask Document", "الانتقال إلى اسأل الوثيقة"), use_container_width=True):
+        if hero_cta_cols[2].button(t("Open Assistant", "فتح المساعد"), use_container_width=True):
             st.session_state["selected_page"] = "assistant"
             st.rerun()
     else:
-        if cta_cols[0].button(t("Sign In", "تسجيل الدخول"), use_container_width=True):
+        if hero_cta_cols[0].button(t("Upload PDF", "رفع PDF"), use_container_width=True):
             st.session_state["home_auth_mode"] = "signin"
-        if cta_cols[1].button(t("Create Account", "إنشاء حساب"), use_container_width=True):
-            st.session_state["home_auth_mode"] = "signup"
-        cta_cols[2].markdown(
-            f"<div class='kb-note-card kb-cta-note'><p>{t('Built for KB teams, internal demos, and judge reviews.', 'مصمم لفرق المعرفة والعروض الداخلية ومراجعات التحكيم.')}</p></div>",
+        if hero_cta_cols[1].button(t("See Demo", "شاهد العرض"), use_container_width=True):
+            st.session_state["home_auth_mode"] = "signin"
+        hero_cta_cols[2].markdown(
+            f"<div class='kb-note-card kb-cta-note'><p>{t('Protected internal access with sign-in and account approval.', 'وصول داخلي محمي عبر تسجيل الدخول وموافقة الحساب.')}</p></div>",
             unsafe_allow_html=True,
         )
 
-    feature_cards = [
-        (t("Topic Detection", "اكتشاف الموضوعات"), t("AI groups extracted sections into retrieval-ready knowledge articles.", "يقوم الذكاء الاصطناعي بتجميع الأقسام المستخرجة في مقالات معرفية جاهزة للاسترجاع.")),
-        (t("Document Analysis", "تحليل الوثيقة"), t("Surface detected topics, article count, and confidence in one view.", "إظهار الموضوعات المكتشفة وعدد المقالات ودرجة الثقة في عرض واحد.")),
-        (t("Knowledge Map", "خريطة المعرفة"), t("Show how the major topics branch from the main document theme.", "إظهار كيفية تفرع الموضوعات الرئيسية من محور الوثيقة الأساسي.")),
-        (t("Word Export", "تصدير Word"), t("Generate one editable Word file per topic plus a master draft.", "إنشاء ملف Word قابل للتحرير لكل موضوع بالإضافة إلى مسودة رئيسية.")),
-        (t("Grounded Q&A", "أسئلة وأجوبة موثقة"), t("Answer questions with evidence from the uploaded document only.", "الإجابة عن الأسئلة بالاعتماد على أدلة من الوثيقة المرفوعة فقط.")),
-        (t("Scan Assist", "مساعد المسح"), t("Flag scan-heavy pages and OCR readiness before final generation.", "تنبيه الصفحات المعتمدة على المسح وحالة OCR قبل التوليد النهائي.")),
+    how_cards = [
+        ("1", t("Upload Document", "رفع الوثيقة"), t("Upload a PDF containing complex documentation.", "ارفع ملف PDF يحتوي على وثائق معقدة.")),
+        ("2", t("AI Analysis", "تحليل الذكاء الاصطناعي"), t("The system detects topics and extracts key knowledge.", "يكتشف النظام الموضوعات ويستخرج المعرفة الأساسية.")),
+        ("3", t("Generate Articles", "إنشاء المقالات"), t("Structured Word documents are created for easy retrieval.", "يتم إنشاء ملفات Word منظمة لسهولة الاسترجاع.")),
     ]
-    feature_markup = "".join(
-        f"<div class='kb-feature-card'><h3>{title}</h3><p>{body}</p></div>"
-        for title, body in feature_cards
+    how_markup = "".join(
+        f"<div class='kb-feature-card'><div class='kb-step-badge'>{step}</div><h3>{title}</h3><p>{body}</p></div>"
+        for step, title, body in how_cards
     )
-    st.markdown(f"<div class='kb-feature-grid'>{feature_markup}</div>", unsafe_allow_html=True)
+    st.markdown(f"### {t('How It Works', 'كيف يعمل')}")
+    st.markdown(f"<div class='kb-feature-grid'>{how_markup}</div>", unsafe_allow_html=True)
 
-    metric_cols = st.columns(3)
-    metric_cols[0].metric(t("Topics detected", "الموضوعات المكتشفة"), demo_or_live.topics_detected)
-    metric_cols[1].metric(t("Knowledge articles generated", "المقالات المعرفية الناتجة"), demo_or_live.knowledge_articles_generated)
-    metric_cols[2].metric(t("Confidence score", "درجة الثقة"), f"{demo_or_live.confidence_score}%")
-    map_cols = st.columns([0.95, 1.05], vertical_alignment="top")
-    with map_cols[0]:
+    example_cards = [
+        (t("Network Security", "أمن الشبكات"), t("Summary of network protection strategies.", "ملخص استراتيجيات حماية الشبكات."), ["security", "firewall", "monitoring"]),
+        (t("Password Policy", "سياسة كلمات المرور"), t("Authentication rules and security guidelines.", "قواعد المصادقة وإرشادات الأمان."), ["authentication", "security"]),
+    ]
+    article_markup = "".join(
+        f"""
+        <div class='kb-topic-card'>
+          <h3>{title}</h3>
+          <p>{summary}</p>
+          <div class='kb-topic-meta'>{''.join(f"<span class='kb-chip'>{tag}</span>" for tag in tags)}</div>
+          <div class='kb-card-action'>{t('Download Word File', 'تنزيل ملف Word')}</div>
+        </div>
+        """
+        for title, summary, tags in example_cards
+    )
+    st.markdown(f"### {t('Generated Knowledge Articles', 'المقالات المعرفية الناتجة')}")
+    st.markdown(f"<div class='kb-article-preview-grid'>{article_markup}</div>", unsafe_allow_html=True)
+
+    st.markdown(f"### {t('Enterprise Impact', 'الأثر المؤسسي')}")
+    impact_cols = st.columns([1.05, 0.95], vertical_alignment="top")
+    with impact_cols[0]:
         render_page_header(
-            t("Homepage Overview", "نظرة عامة"),
-            t("A cleaner first view for judges, reviewers, and internal KB teams.", "واجهة أولى أوضح للمحكمين والمراجعين وفرق المعرفة الداخلية."),
+            t("Built for Enterprise Knowledge Management", "مصمم لإدارة المعرفة المؤسسية"),
+            t("Reduce manual document processing and prepare large PDFs for structured retrieval.", "قلّل المعالجة اليدوية للوثائق وجهّز ملفات PDF الكبيرة للاسترجاع المنظم."),
         )
-        st.markdown(f"- {t('Upload one complex PDF and process it into topic-based articles.', 'ارفع ملف PDF معقداً واحداً وقم بتحويله إلى مقالات مبنية على الموضوعات.')}")
-        st.markdown(f"- {t('Review article cards, inspect evidence, and export editable Word outputs.', 'راجع بطاقات المقالات، وافحص الأدلة، وصدّر ملفات Word قابلة للتحرير.')}")
-        st.markdown(f"- {t('Use the document assistant for grounded retrieval against the uploaded file.', 'استخدم مساعد الوثيقة للاسترجاع الموثق من الملف المرفوع.')}")
-    with map_cols[1]:
+        st.markdown(f"- {t('Reduce manual document processing', 'تقليل المعالجة اليدوية للوثائق')}")
+        st.markdown(f"- {t('Improve information retrieval', 'تحسين استرجاع المعلومات')}")
+        st.markdown(f"- {t('Enable AI-powered knowledge systems', 'تمكين أنظمة المعرفة المدعومة بالذكاء الاصطناعي')}")
+        st.markdown(f"- {t('Support internal teams with account-based access and review flows', 'دعم الفرق الداخلية عبر الوصول بالحسابات وتدفقات المراجعة')}")
+    with impact_cols[1]:
+        metric_cols = st.columns(3)
+        metric_cols[0].metric(t("Topics detected", "الموضوعات المكتشفة"), demo_or_live.topics_detected)
+        metric_cols[1].metric(t("Knowledge articles generated", "المقالات المعرفية الناتجة"), demo_or_live.knowledge_articles_generated)
+        metric_cols[2].metric(t("Confidence score", "درجة الثقة"), f"{demo_or_live.confidence_score}%")
         render_knowledge_map(demo_or_live, False)
+
+    st.markdown(
+        f"""
+        <div class="kb-home-cta-block">
+          <h3>{t('Start Transforming Your Documents Today', 'ابدأ في تحويل وثائقك اليوم')}</h3>
+          <p>{t('Upload a PDF, let the AI process it, and retrieve structured knowledge articles in minutes.', 'ارفع ملف PDF، ودع الذكاء الاصطناعي يعالجه، واستخرج مقالات معرفية منظمة خلال دقائق.')}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    final_cta_cols = st.columns([1, 1.5])
+    if authenticated:
+        if final_cta_cols[0].button(t("Go to Workspace", "الانتقال إلى مساحة العمل"), use_container_width=True, key="final_cta_workspace"):
+            st.session_state["selected_page"] = "workspace"
+            st.rerun()
+    else:
+        if final_cta_cols[0].button(t("Upload a PDF", "رفع ملف PDF"), use_container_width=True, key="final_cta_upload"):
+            st.session_state["home_auth_mode"] = "signin"
+    final_cta_cols[1].markdown(
+        f"<div class='kb-note-card'><p>{t('PDF2Knowledge AI • AI Hackathon Prototype • Built for the Malomatia AI Challenge', 'PDF2Knowledge AI • نموذج أولي للهاكاثون • مبني لتحدي مالوماتيا للذكاء الاصطناعي')}</p></div>",
+        unsafe_allow_html=True,
+    )
 
     if not authenticated:
         render_page_header(
             t("Access the Prototype", "الوصول إلى النموذج الأولي"),
-            t("Sign in to work with documents, or create an account and wait for supervisor approval.", "سجّل الدخول للعمل على الوثائق، أو أنشئ حساباً وانتظر موافقة المشرف."),
+            t("Internal access is account-based. Sign in with an approved account or create a new account for supervisor review.", "الوصول الداخلي يعتمد على الحسابات. سجّل الدخول بحساب معتمد أو أنشئ حساباً جديداً لمراجعة المشرف."),
         )
-        auth_mode = st.radio(
-            t("Authentication Mode", "وضع المصادقة"),
-            [("signin", t("Sign In", "تسجيل الدخول")), ("signup", t("Create Account", "إنشاء حساب"))],
-            format_func=lambda item: item[1],
-            index=0 if st.session_state.get("home_auth_mode") == "signin" else 1,
-            horizontal=True,
-        )[0]
-        st.session_state["home_auth_mode"] = auth_mode
-        if auth_mode == "signin":
+        access_cols = st.columns(2, vertical_alignment="top")
+        with access_cols[0]:
+            st.markdown(
+                f"""
+                <div class="kb-access-card">
+                  <h3>{t('Sign In', 'تسجيل الدخول')}</h3>
+                  <p>{t('Use an approved account to upload PDFs, process documents, and export knowledge articles.', 'استخدم حساباً معتمداً لرفع ملفات PDF ومعالجة الوثائق وتصدير المقالات المعرفية.')}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             with st.form("login_form"):
                 user_id = st.text_input(t("User ID", "معرف المستخدم"), value="")
                 password = st.text_input(t("Password", "كلمة المرور"), type="password", value="")
@@ -339,7 +442,16 @@ def render_home(authenticated: bool) -> None:
                 st.write("kb_admin / Admin@123")
                 st.write("kb_reviewer / Reviewer@123")
                 st.write("kb_auditor / Auditor@123")
-        else:
+        with access_cols[1]:
+            st.markdown(
+                f"""
+                <div class="kb-access-card">
+                  <h3>{t('Create Account', 'إنشاء حساب')}</h3>
+                  <p>{t('New accounts are submitted for supervisor approval before they can use the workspace.', 'يتم إرسال الحسابات الجديدة لموافقة المشرف قبل أن تتمكن من استخدام مساحة العمل.')}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             with st.form("signup_form"):
                 new_user_id = st.text_input(t("Requested user ID", "معرف المستخدم المطلوب"))
                 new_display_name = st.text_input(t("Display name", "الاسم المعروض"))
@@ -387,7 +499,7 @@ def sidebar_nav(settings: dict) -> str:
             unsafe_allow_html=True,
         )
         nav_items = [
-            ("home", t("Dashboard", "لوحة التحكم")),
+            ("home", t("Home", "الرئيسية")),
             ("workspace", t("Workspace", "مساحة العمل")),
             ("articles", t("Knowledge Articles", "المقالات المعرفية")),
             ("assistant", t("Ask Document", "اسأل الوثيقة")),
