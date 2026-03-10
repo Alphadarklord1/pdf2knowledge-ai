@@ -41,11 +41,39 @@ class TopicDocument:
     topic_id: str
     title: str
     summary: str
+    key_points: list[str]
+    detailed_explanation: str
+    tags: list[str]
     sections: list[DraftSection]
 
 
 def tokenize(text: str) -> list[str]:
     return [token.lower() for token in TOKEN_RE.findall(text or "")]
+
+
+STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "into",
+    "this",
+    "that",
+    "these",
+    "those",
+    "على",
+    "من",
+    "في",
+    "الى",
+    "إلى",
+    "عن",
+    "مع",
+    "هذا",
+    "هذه",
+    "ذلك",
+    "تلك",
+}
 
 
 def _tfidf_vector(counter: Counter[str], idf: dict[str, float], total_tokens: int) -> tuple[dict[str, float], float]:
@@ -135,6 +163,32 @@ def _local_draft(parse_result: ParseResult, instruction: str) -> KBDraft:
     )
 
 
+def _sentence_split(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?؟])\s+|\n+", text.strip())
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _extract_key_points(text: str, limit: int = 4) -> list[str]:
+    points: list[str] = []
+    for part in _sentence_split(text):
+        cleaned = " ".join(part.split())
+        if len(cleaned) >= 20:
+            points.append(cleaned[:180])
+        if len(points) >= limit:
+            break
+    if not points and text.strip():
+        points.append(" ".join(text.split())[:180])
+    return points
+
+
+def _extract_tags(title: str, text: str, limit: int = 5) -> list[str]:
+    counts = Counter(token for token in tokenize(f"{title} {text}") if len(token) > 3 and token not in STOPWORDS)
+    tags = [token for token, _ in counts.most_common(limit)]
+    if not tags and title.strip():
+        tags = [token for token in tokenize(title)[:limit]]
+    return tags
+
+
 def _openai_chat(prompt: str, api_key: str, model: str) -> str | None:
     body = json.dumps(
         {
@@ -203,11 +257,17 @@ def generate_kb_draft(parse_result: ParseResult, instruction: str, *, openai_api
 def split_draft_into_topic_documents(draft: KBDraft) -> list[TopicDocument]:
     documents: list[TopicDocument] = []
     for index, section in enumerate(draft.sections, start=1):
+        detail = section.content.strip()
+        key_points = _extract_key_points(detail)
+        summary = key_points[0] if key_points else detail[:400]
         documents.append(
             TopicDocument(
                 topic_id=f"topic-{index}",
                 title=section.heading,
-                summary=section.content.split("\n", 1)[0][:400],
+                summary=summary[:400],
+                key_points=key_points,
+                detailed_explanation=detail,
+                tags=_extract_tags(section.heading, detail),
                 sections=[section],
             )
         )

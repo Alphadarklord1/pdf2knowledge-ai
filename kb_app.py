@@ -227,16 +227,22 @@ def render_topic_cards(draft: KBDraft, privacy_on: bool) -> None:
             st.markdown("<div class='kb-topic-card'>", unsafe_allow_html=True)
             st.markdown(f"### {mask_sensitive_text(topic.title, privacy_on)}")
             st.markdown(mask_sensitive_text(topic.summary, privacy_on))
+            if topic.tags:
+                tag_markup = " ".join(f"<span class='kb-chip'>{mask_sensitive_text(tag, privacy_on)}</span>" for tag in topic.tags)
+                st.markdown(f"<div class='kb-topic-meta'>{tag_markup}</div>", unsafe_allow_html=True)
+            if topic.key_points:
+                st.markdown(f"**{t('Key Points', 'النقاط الرئيسية')}**")
+                for point in topic.key_points[:3]:
+                    st.markdown(f"- {mask_sensitive_text(point, privacy_on)}")
             if topic.sections and topic.sections[0].source_pages:
                 st.markdown(
                     f"<div class='kb-topic-meta'><span class='kb-chip'>{t('Pages', 'الصفحات')}: {', '.join(map(str, topic.sections[0].source_pages))}</span></div>",
                     unsafe_allow_html=True,
                 )
-            topic_name = topic.title.lower().replace(" ", "-")[:50] or topic.topic_id
             st.download_button(
                 t("Download Word", "تنزيل Word"),
                 data=export_topic_document_bytes(topic),
-                file_name=f"{topic_name}.docx",
+                file_name=f"{topic.topic_id}-{topic.title.lower().replace(' ', '-')[:50] or topic.topic_id}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 key=f"topic_dl_{topic.topic_id}",
                 use_container_width=True,

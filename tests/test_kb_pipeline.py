@@ -4,7 +4,7 @@ import uuid
 
 from kb_export import export_draft_to_docx_bytes, export_share_package_bytes, export_topic_bundle_zip_bytes
 from kb_parser import DecomposedSection, ParseResult, PdfPage, decompose_pages
-from kb_pipeline import generate_kb_draft
+from kb_pipeline import generate_kb_draft, split_draft_into_topic_documents
 from kb_rag import answer_question
 from kb_store import (
     authenticate_user,
@@ -47,6 +47,12 @@ def test_generate_kb_draft_returns_sections() -> None:
     assert draft.title
     assert draft.sections
     assert draft.llm_used is False
+    topics = split_draft_into_topic_documents(draft)
+    assert topics
+    assert topics[0].summary
+    assert topics[0].key_points
+    assert topics[0].detailed_explanation
+    assert topics[0].tags
 
 
 def test_docx_export_returns_bytes() -> None:

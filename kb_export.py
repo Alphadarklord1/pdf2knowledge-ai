@@ -58,10 +58,21 @@ def export_topic_bundle_zip_bytes(draft: KBDraft) -> bytes:
 def export_topic_document_bytes(topic: TopicDocument) -> bytes:
     document = Document()
     document.add_heading(topic.title, level=0)
+    document.add_heading("Summary", level=1)
     document.add_paragraph(topic.summary)
+    if topic.tags:
+        document.add_paragraph(f"Tags: {', '.join(topic.tags)}")
+    if topic.key_points:
+        document.add_heading("Key Points", level=1)
+        for point in topic.key_points:
+            document.add_paragraph(point, style="List Bullet")
+    document.add_heading("Detailed Explanation", level=1)
+    document.add_paragraph(topic.detailed_explanation)
     for section in topic.sections:
-        document.add_heading(section.heading, level=1)
+        document.add_heading(section.heading, level=2)
         document.add_paragraph(section.content)
+        if section.source_pages:
+            document.add_paragraph(f"Source pages: {', '.join(map(str, section.source_pages))}")
     payload = BytesIO()
     document.save(payload)
     return payload.getvalue()
