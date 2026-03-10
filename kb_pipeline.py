@@ -47,6 +47,23 @@ class TopicDocument:
     sections: list[DraftSection]
 
 
+@dataclass
+class KnowledgeMapNode:
+    label: str
+    children: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DocumentAnalysis:
+    topics_detected: int
+    knowledge_articles_generated: int
+    confidence_score: int
+    policy_topics: list[str]
+    procedure_topics: list[str]
+    root_topic: str
+    knowledge_map: KnowledgeMapNode
+
+
 def tokenize(text: str) -> list[str]:
     return [token.lower() for token in TOKEN_RE.findall(text or "")]
 
@@ -73,6 +90,16 @@ STOPWORDS = {
     "هذه",
     "ذلك",
     "تلك",
+}
+POLICY_KEYWORDS = {
+    "policy", "policies", "requirement", "requirements", "compliance", "control", "controls",
+    "password", "security", "privacy", "retention", "governance", "rule", "rules",
+    "سياسة", "سياسات", "امتثال", "ضوابط", "قاعدة", "قواعد",
+}
+PROCEDURE_KEYWORDS = {
+    "procedure", "procedures", "process", "workflow", "steps", "backup", "incident", "response",
+    "implementation", "review", "approval", "restore", "triage",
+    "إجراء", "إجراءات", "عملية", "عمليات", "خطوات", "نسخ", "استجابة", "مراجعة",
 }
 
 
@@ -187,6 +214,60 @@ def _extract_tags(title: str, text: str, limit: int = 5) -> list[str]:
     if not tags and title.strip():
         tags = [token for token in tokenize(title)[:limit]]
     return tags
+
+
+def _topic_kind(title: str, text: str, tags: list[str]) -> str:
+    haystack = set(tokenize(f"{title} {text} {' '.join(tags)}"))
+    policy_hits = len(haystack.intersection(POLICY_KEYWORDS))
+    procedure_hits = len(haystack.intersection(PROCEDURE_KEYWORDS))
+    if policy_hits >= procedure_hits and policy_hits > 0:
+        return "policy"
+    if procedure_hits > 0:
+        return "procedure"
+    return "general"
+
+
+def _root_topic(parse_result: ParseResult, topics: list[TopicDocument]) -> str:
+    if parse_result.sections:
+        first_heading = parse_result.sections[0].heading.strip()
+        if first_heading and len(first_heading.split()) <= 8:
+            return first_heading
+    if topics:
+        title = topics[0].title.strip()
+        if title:
+            return title
+    return "Knowledge Base"
+
+
+def build_document_analysis(parse_result: ParseResult, draft: KBDraft) -> DocumentAnalysis:
+    topics = split_draft_into_topic_documents(draft)
+    policy_topics: list[str] = []
+    procedure_topics: list[str] = []
+    for topic in topics:
+        kind = _topic_kind(topic.title, topic.detailed_explanation, topic.tags)
+        if kind == "policy":
+            policy_topics.append(topic.title)
+        elif kind == "procedure":
+            procedure_topics.append(topic.title)
+    strong_pages = sum(1 for page in parse_result.pages if page.extraction_quality in {"strong", "ocr"})
+    usable_pages = sum(1 for page in parse_result.pages if page.extraction_quality == "usable")
+    weak_pages = sum(1 for page in parse_result.pages if page.extraction_quality == "weak")
+    confidence = 68
+    confidence += min(12, len(parse_result.sections) * 2)
+    confidence += min(10, len(topics) * 2)
+    confidence += min(8, strong_pages * 2 + usable_pages)
+    confidence -= min(12, len(parse_result.warnings) * 3 + weak_pages)
+    confidence = max(45, min(98, confidence))
+    root = _root_topic(parse_result, topics)
+    return DocumentAnalysis(
+        topics_detected=len(parse_result.sections),
+        knowledge_articles_generated=len(topics),
+        confidence_score=confidence,
+        policy_topics=policy_topics[:6],
+        procedure_topics=procedure_topics[:6],
+        root_topic=root,
+        knowledge_map=KnowledgeMapNode(label=root, children=[topic.title for topic in topics[:8]]),
+    )
 
 
 def _openai_chat(prompt: str, api_key: str, model: str) -> str | None:

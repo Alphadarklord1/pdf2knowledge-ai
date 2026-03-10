@@ -8,7 +8,7 @@ import streamlit as st
 
 from kb_export import export_draft_to_docx_bytes, export_share_package_bytes, export_topic_bundle_zip_bytes, export_topic_document_bytes
 from kb_parser import get_ocr_tool_status, parse_pdf
-from kb_pipeline import KBDraft, generate_kb_draft, split_draft_into_topic_documents
+from kb_pipeline import DocumentAnalysis, KBDraft, build_document_analysis, generate_kb_draft, split_draft_into_topic_documents
 from kb_privacy import mask_sensitive_text
 from kb_rag import answer_question as answer_document_question
 from kb_store import (
@@ -250,6 +250,14 @@ def render_topic_cards(draft: KBDraft, privacy_on: bool) -> None:
             st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_knowledge_map(analysis: DocumentAnalysis, privacy_on: bool) -> None:
+    st.markdown(f"### {t('Knowledge Map', 'خريطة المعرفة')}")
+    lines = [mask_sensitive_text(analysis.knowledge_map.label, privacy_on)]
+    for child in analysis.knowledge_map.children:
+        lines.append(f"  ├── {mask_sensitive_text(child, privacy_on)}")
+    st.code("\n".join(lines), language=None)
+
+
 def render_workspace(settings: dict) -> None:
     parse_result = st.session_state.get("parse_result")
     draft: KBDraft | None = st.session_state.get("draft")
@@ -329,12 +337,18 @@ def render_workspace(settings: dict) -> None:
     draft = st.session_state.get("draft")
     if parse_result is None:
         return
+    analysis = build_document_analysis(parse_result, draft) if draft is not None else None
 
     metric_cols = st.columns(4)
     metric_cols[0].metric(t("Pages", "الصفحات"), len(parse_result.pages))
     metric_cols[1].metric(t("Detected Sections", "الأقسام المكتشفة"), len(parse_result.sections))
     metric_cols[2].metric(t("Table-like lines", "أسطر شبيهة بالجداول"), parse_result.total_tables)
     metric_cols[3].metric(t("Visual refs", "الإشارات البصرية"), parse_result.total_visual_references)
+    if analysis is not None:
+        analysis_cols = st.columns(3)
+        analysis_cols[0].metric(t("Topics detected", "الموضوعات المكتشفة"), analysis.topics_detected)
+        analysis_cols[1].metric(t("Knowledge articles generated", "المقالات المعرفية الناتجة"), analysis.knowledge_articles_generated)
+        analysis_cols[2].metric(t("Confidence score", "درجة الثقة"), f"{analysis.confidence_score}%")
     status_cols = st.columns(3)
     status_cols[0].metric(t("OCR Pages", "صفحات OCR"), parse_result.ocr_pages)
     status_cols[1].metric(t("Images", "الصور"), parse_result.total_images)
@@ -347,6 +361,7 @@ def render_workspace(settings: dict) -> None:
     ).strip().lower()
 
     tabs = st.tabs([
+        t("Analysis", "التحليل"),
         t("Decomposition", "التفكيك"),
         t("Pages", "الصفحات"),
         t("Knowledge Articles", "المقالات المعرفية"),
@@ -357,6 +372,31 @@ def render_workspace(settings: dict) -> None:
     ])
 
     with tabs[0]:
+        if analysis is None:
+            st.info(t("Generate knowledge articles to see document analysis and the knowledge map.", "أنشئ المقالات المعرفية لعرض تحليل الوثيقة وخريطة المعرفة."))
+        else:
+            left, right = st.columns([1.1, 0.9])
+            with left:
+                st.markdown(f"### {t('Document Analysis', 'تحليل الوثيقة')}")
+                st.markdown(f"- **{t('Topics detected', 'الموضوعات المكتشفة')}**: {analysis.topics_detected}")
+                st.markdown(f"- **{t('Knowledge articles generated', 'المقالات المعرفية الناتجة')}**: {analysis.knowledge_articles_generated}")
+                st.markdown(f"- **{t('Confidence score', 'درجة الثقة')}**: {analysis.confidence_score}%")
+                st.markdown(f"**{t('Policies detected', 'السياسات المكتشفة')}**")
+                if analysis.policy_topics:
+                    for item in analysis.policy_topics:
+                        st.markdown(f"- {mask_sensitive_text(item, privacy_on)}")
+                else:
+                    st.caption(t("No policy-heavy topic was detected yet.", "لم يتم اكتشاف موضوعات سياسات واضحة بعد."))
+                st.markdown(f"**{t('Procedures detected', 'الإجراءات المكتشفة')}**")
+                if analysis.procedure_topics:
+                    for item in analysis.procedure_topics:
+                        st.markdown(f"- {mask_sensitive_text(item, privacy_on)}")
+                else:
+                    st.caption(t("No procedure-heavy topic was detected yet.", "لم يتم اكتشاف موضوعات إجراءات واضحة بعد."))
+            with right:
+                render_knowledge_map(analysis, privacy_on)
+
+    with tabs[1]:
         if parse_result.warnings:
             for warning in parse_result.warnings:
                 st.warning(warning)
@@ -379,7 +419,7 @@ def render_workspace(settings: dict) -> None:
                     for item in section.visual_references:
                         st.write(f"- {mask_sensitive_text(item, privacy_on)}")
 
-    with tabs[1]:
+    with tabs[2]:
         for page in parse_result.pages:
             with st.expander(f"{t('Page', 'صفحة')} {page.page_number}"):
                 st.text(mask_sensitive_text(page.text or "<no extractable text>", privacy_on))
@@ -388,7 +428,7 @@ def render_workspace(settings: dict) -> None:
                     f"{t('OCR used', 'تم استخدام OCR')}: {t('Yes', 'نعم') if page.ocr_used else t('No', 'لا')}"
                 )
 
-    with tabs[2]:
+    with tabs[3]:
         if draft is None:
             st.info(t("Generate knowledge articles to see the topic cards.", "أنشئ المقالات المعرفية لعرض بطاقات الموضوعات."))
         else:
@@ -413,7 +453,7 @@ def render_workspace(settings: dict) -> None:
             else:
                 render_topic_cards(draft, privacy_on)
 
-    with tabs[3]:
+    with tabs[4]:
         st.markdown(f"### {t('Document RAG Assistant', 'مساعد الاسترجاع للوثيقة')}")
         question = st.text_area(
             t("Ask a grounded question about the uploaded PDF", "اطرح سؤالاً موثقاً حول ملف PDF المرفوع"),
@@ -462,7 +502,7 @@ def render_workspace(settings: dict) -> None:
                         st.write(mask_sensitive_text(str(hit.get("text", "")), privacy_on))
                         st.caption(f"score={float(hit.get('rerank_score', 0.0)):.3f}")
 
-    with tabs[4]:
+    with tabs[5]:
         st.markdown(f"### {t('Scan Intake Guidance', 'إرشادات إدخال المسح')}")
         scan_pages = [page for page in parse_result.pages if page.likely_scanned]
         if scan_pages:
@@ -490,7 +530,7 @@ def render_workspace(settings: dict) -> None:
                 if page.ocr_warning:
                     st.caption(page.ocr_warning)
 
-    with tabs[5]:
+    with tabs[6]:
         if draft is None:
             st.info(t("Generate a draft to review and edit it here.", "أنشئ مسودة لمراجعتها وتحريرها هنا."))
         else:
@@ -503,7 +543,7 @@ def render_workspace(settings: dict) -> None:
                 st.caption(f"{t('Source pages', 'الصفحات المصدرية')}: {', '.join(map(str, section.source_pages))}")
             st.session_state["draft"] = draft
 
-    with tabs[6]:
+    with tabs[7]:
         if draft is None:
             st.info(t("Generate a draft first.", "أنشئ مسودة أولاً."))
         else:

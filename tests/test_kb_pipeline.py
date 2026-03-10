@@ -4,7 +4,7 @@ import uuid
 
 from kb_export import export_draft_to_docx_bytes, export_share_package_bytes, export_topic_bundle_zip_bytes
 from kb_parser import DecomposedSection, ParseResult, PdfPage, decompose_pages
-from kb_pipeline import generate_kb_draft, split_draft_into_topic_documents
+from kb_pipeline import build_document_analysis, generate_kb_draft, split_draft_into_topic_documents
 from kb_rag import answer_question
 from kb_store import (
     authenticate_user,
@@ -53,6 +53,11 @@ def test_generate_kb_draft_returns_sections() -> None:
     assert topics[0].key_points
     assert topics[0].detailed_explanation
     assert topics[0].tags
+    analysis = build_document_analysis(parse_result, draft)
+    assert analysis.topics_detected >= 2
+    assert analysis.knowledge_articles_generated >= 1
+    assert 45 <= analysis.confidence_score <= 98
+    assert analysis.knowledge_map.children
 
 
 def test_docx_export_returns_bytes() -> None:
