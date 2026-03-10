@@ -23,6 +23,10 @@ html, body, [data-testid="stAppViewContainer"] {
   border-right: 1px solid var(--kb-border);
 }
 
+[data-testid="stSidebar"] * {
+  color: var(--kb-text);
+}
+
 .block-container {
   max-width: 1280px;
   padding-top: 2rem;
@@ -72,6 +76,46 @@ html, body, [data-testid="stAppViewContainer"] {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.9rem;
+}
+
+.kb-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1rem 0 1.25rem;
+}
+
+.kb-feature-card,
+.kb-sidebar-card,
+.kb-page-header {
+  background: var(--kb-panel);
+  border: 1px solid var(--kb-border);
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 10px 24px rgba(13, 26, 38, 0.04);
+}
+
+.kb-feature-card h3,
+.kb-page-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.kb-feature-card p,
+.kb-sidebar-card p,
+.kb-page-header p {
+  margin: 0.55rem 0 0;
+  color: var(--kb-muted);
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.kb-sidebar-card {
+  margin: 0.25rem 0 0.8rem;
+}
+
+.kb-page-header {
+  margin-bottom: 1rem;
 }
 
 .kb-step-card, .kb-topic-card, .kb-note-card {
@@ -237,12 +281,15 @@ html[dir="rtl"] .block-container {
 html[dir="rtl"] .kb-step-card,
 html[dir="rtl"] .kb-topic-card,
 html[dir="rtl"] .kb-note-card,
-html[dir="rtl"] .kb-hero {
+html[dir="rtl"] .kb-hero,
+html[dir="rtl"] .kb-feature-card,
+html[dir="rtl"] .kb-page-header,
+html[dir="rtl"] .kb-sidebar-card {
   text-align: right;
 }
 
 @media (max-width: 900px) {
-  .kb-step-grid, .kb-topic-grid, .kb-map-children {
+  .kb-step-grid, .kb-topic-grid, .kb-map-children, .kb-feature-grid {
     grid-template-columns: 1fr;
   }
 

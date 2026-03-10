@@ -8,14 +8,18 @@ from kb_pipeline import build_document_analysis, generate_kb_draft, split_draft_
 from kb_rag import answer_question
 from kb_store import (
     authenticate_user,
+    create_error_report,
     create_share_item,
     create_signup_user,
+    export_error_reports_jsonl,
     generate_share_code,
     get_share_payload,
     init_db,
+    list_error_reports,
     list_feedback_items,
     list_share_items,
     list_users,
+    review_error_report,
     review_feedback_item,
     submit_feedback,
 )
@@ -120,6 +124,18 @@ def test_feedback_submission_and_review_flow() -> None:
     review_feedback_item(feedback_id, "kb_admin", "resolved")
     updated = list_feedback_items(limit=20)
     assert any(item["feedback_id"] == feedback_id and item["status"] == "resolved" for item in updated)
+
+
+def test_error_report_submission_review_and_export() -> None:
+    init_db()
+    error_id = create_error_report("kb_admin", "workspace_processing", "Parser failed on uploaded file.", context={"filename": "sample.pdf"})
+    items = list_error_reports(limit=20)
+    assert any(item["error_id"] == error_id and item["status"] == "open" for item in items)
+    review_error_report(error_id, "kb_admin", "resolved")
+    updated = list_error_reports(limit=20)
+    assert any(item["error_id"] == error_id and item["status"] == "resolved" for item in updated)
+    payload = export_error_reports_jsonl(limit=20)
+    assert error_id.encode("utf-8") in payload
 
 
 def test_share_package_creation_and_export() -> None:

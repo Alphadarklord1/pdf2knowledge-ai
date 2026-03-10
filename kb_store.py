@@ -98,6 +98,18 @@ def init_db() -> None:
               reviewed_at_utc TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS error_reports (
+              error_id TEXT PRIMARY KEY,
+              created_at_utc TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              source TEXT NOT NULL,
+              message TEXT NOT NULL,
+              context_json TEXT NOT NULL,
+              status TEXT NOT NULL,
+              reviewer_user_id TEXT,
+              reviewed_at_utc TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS share_items (
               share_id TEXT PRIMARY KEY,
               created_at_utc TEXT NOT NULL,
@@ -286,6 +298,68 @@ def review_feedback_item(feedback_id: str, reviewer_user_id: str, status: str) -
 
 def export_feedback_jsonl(limit: int = 500) -> bytes:
     rows = list_feedback_items(limit=limit)
+    payload = "\n".join(json.dumps(item, ensure_ascii=False) for item in rows)
+    return payload.encode("utf-8")
+
+
+def create_error_report(user_id: str, source: str, message: str, *, context: dict[str, Any] | None = None) -> str:
+    error_id = str(uuid.uuid4())
+    with connect_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO error_reports(
+              error_id, created_at_utc, user_id, source, message, context_json, status, reviewer_user_id, reviewed_at_utc
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                error_id,
+                utc_now(),
+                user_id,
+                source.strip() or "general",
+                message.strip() or "Unknown error",
+                json.dumps(context or {}, ensure_ascii=False),
+                "open",
+                None,
+                None,
+            ),
+        )
+    append_audit_event(user_id, "create_error_report", "success", {"error_id": error_id, "source": source})
+    return error_id
+
+
+def list_error_reports(limit: int = 100) -> list[dict[str, Any]]:
+    with connect_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT error_id, created_at_utc, user_id, source, message, context_json, status, reviewer_user_id, reviewed_at_utc
+            FROM error_reports
+            ORDER BY created_at_utc DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["context"] = json.loads(item.pop("context_json") or "{}")
+        items.append(item)
+    return items
+
+
+def review_error_report(error_id: str, reviewer_user_id: str, status: str) -> None:
+    with connect_db() as conn:
+        conn.execute(
+            """
+            UPDATE error_reports
+            SET status = ?, reviewer_user_id = ?, reviewed_at_utc = ?
+            WHERE error_id = ?
+            """,
+            (status, reviewer_user_id, utc_now(), error_id),
+        )
+
+
+def export_error_reports_jsonl(limit: int = 500) -> bytes:
+    rows = list_error_reports(limit=limit)
     payload = "\n".join(json.dumps(item, ensure_ascii=False) for item in rows)
     return payload.encode("utf-8")
 

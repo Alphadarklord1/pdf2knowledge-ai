@@ -80,3 +80,8 @@ openai_model = "gpt-4o-mini"
 - `kb_privacy.py`: masking helpers
 - `tests/test_kb_pipeline.py`: pipeline, sharing, feedback, and RAG regression tests
 - `tests/test_kb_pipeline.py`: basic regression tests
+## Collaboration
+- License: MIT. See `/Users/armankhan/Documents/kb-pdf-decomposer/LICENSE`.
+- Contribution guide: `/Users/armankhan/Documents/kb-pdf-decomposer/CONTRIBUTING.md`.
+- Conduct rules: `/Users/armankhan/Documents/kb-pdf-decomposer/CODE_OF_CONDUCT.md`.
+- For direct edits by teammates, invite them as GitHub collaborators on the repo.
