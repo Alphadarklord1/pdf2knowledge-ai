@@ -214,6 +214,40 @@ def render_page_header(title: str, subtitle: str) -> None:
     )
 
 
+def render_top_nav(status_label: str) -> None:
+    nav_items = [
+        ("home", t("Dashboard", "لوحة التحكم")),
+        ("workspace", t("Process Document", "معالجة الوثيقة")),
+        ("articles", t("Knowledge Articles", "المقالات المعرفية")),
+    ]
+    button_markup = "".join(
+        f"<span class='kb-topnav-link {'active' if st.session_state.get('selected_page') == key else ''}'>{label}</span>"
+        for key, label in nav_items
+    )
+    st.markdown(
+        f"""
+        <div class="kb-topnav">
+          <div class="kb-topnav-brand">
+            <span class="kb-topnav-title">{t('PDF2Knowledge AI', 'PDF2Knowledge AI')}</span>
+            <span class="kb-topnav-links">{button_markup}</span>
+          </div>
+          <div class="kb-topnav-status">{t('Status', 'الحالة')}: {status_label}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    nav_cols = st.columns(3)
+    if nav_cols[0].button(t("Dashboard", "لوحة التحكم"), use_container_width=True, key="topnav_home"):
+        st.session_state["selected_page"] = "home"
+        st.rerun()
+    if nav_cols[1].button(t("Process Document", "معالجة الوثيقة"), use_container_width=True, key="topnav_workspace"):
+        st.session_state["selected_page"] = "workspace"
+        st.rerun()
+    if nav_cols[2].button(t("Knowledge Articles", "المقالات المعرفية"), use_container_width=True, key="topnav_articles"):
+        st.session_state["selected_page"] = "articles"
+        st.rerun()
+
+
 def render_home(authenticated: bool) -> None:
     parse_ready = st.session_state.get("parse_result") is not None
     draft_ready = st.session_state.get("draft") is not None
@@ -353,7 +387,7 @@ def sidebar_nav(settings: dict) -> str:
             unsafe_allow_html=True,
         )
         nav_items = [
-            ("home", t("Home", "الرئيسية")),
+            ("home", t("Dashboard", "لوحة التحكم")),
             ("workspace", t("Workspace", "مساحة العمل")),
             ("articles", t("Knowledge Articles", "المقالات المعرفية")),
             ("assistant", t("Ask Document", "اسأل الوثيقة")),
@@ -618,13 +652,17 @@ def render_export_share_section(draft: KBDraft, privacy_on: bool) -> None:
 
 def render_workspace(settings: dict) -> None:
     parse_result, draft, privacy_on, analysis = get_active_document_state(settings)
+    render_top_nav(str(st.session_state.get("processing_status") or "Ready"))
     render_page_header(
-        t("Workspace", "مساحة العمل"),
-        t("Upload one PDF, process it, and inspect decomposition quality before generating deliverables.", "ارفع ملف PDF واحداً، ثم قم بمعالجته، وافحص جودة التفكيك قبل إنشاء المخرجات."),
+        t("Process Document", "معالجة الوثيقة"),
+        t("Upload a PDF, watch the AI workflow, inspect detected topics, and move into knowledge article generation.", "ارفع ملف PDF، وتابع سير عمل الذكاء الاصطناعي، وافحص الموضوعات المكتشفة، ثم انتقل إلى إنشاء المقالات المعرفية."),
     )
-    left, right = st.columns([1.25, 0.75])
-    with left:
+    dashboard_left, dashboard_right = st.columns([1.05, 0.95], vertical_alignment="top")
+    with dashboard_left:
+        st.markdown(f"### {t('Upload PDF', 'رفع ملف PDF')}")
         uploaded = st.file_uploader(t("Upload PDF", "رفع ملف PDF"), type=["pdf"])
+        st.caption(t("Supported file type: PDF", "نوع الملف المدعوم: PDF"))
+        st.caption(t("Recommended size: under 50MB", "الحجم الموصى به: أقل من 50 ميجابايت"))
         instruction = st.text_area(
             t("Guided instruction", "تعليمات موجهة"),
             value=t(
@@ -633,27 +671,88 @@ def render_workspace(settings: dict) -> None:
             ),
             height=120,
         )
-    with right:
+    with dashboard_right:
+        st.markdown(f"### {t('Document Insights', 'رؤى الوثيقة')}")
+        if analysis is not None:
+            insight_cols = st.columns(2)
+            insight_cols[0].metric(t("Pages analyzed", "الصفحات المحللة"), len(parse_result.pages) if parse_result else 0)
+            insight_cols[1].metric(t("Topics detected", "الموضوعات المكتشفة"), analysis.topics_detected)
+            insight_cols[0].metric(t("Articles generated", "المقالات الناتجة"), analysis.knowledge_articles_generated)
+            insight_cols[1].metric(t("Confidence", "الثقة"), f"{analysis.confidence_score}%")
+        elif parse_result is not None:
+            insight_cols = st.columns(2)
+            insight_cols[0].metric(t("Pages analyzed", "الصفحات المحللة"), len(parse_result.pages))
+            insight_cols[1].metric(t("Detected sections", "الأقسام المكتشفة"), len(parse_result.sections))
+        else:
+            st.markdown(
+                f"<div class='kb-note-card'><p>{t('Insights will appear after the document is processed.', 'ستظهر الرؤى بعد معالجة الوثيقة.')}</p></div>",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(f"### {t('Topics Detected', 'الموضوعات المكتشفة')}")
+        if analysis is not None and analysis.knowledge_map.children:
+            for topic in analysis.knowledge_map.children:
+                st.markdown(f"<div class='kb-topic-line'>{mask_sensitive_text(topic, privacy_on)}</div>", unsafe_allow_html=True)
+        elif parse_result is not None:
+            for section in parse_result.sections[:6]:
+                page_range = f"{min(section.page_numbers)}-{max(section.page_numbers)}" if section.page_numbers else "-"
+                st.markdown(
+                    f"<div class='kb-topic-line'>{mask_sensitive_text(section.heading, privacy_on)} <span>{t('Pages', 'الصفحات')} {page_range}</span></div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption(t("Topics will appear after processing.", "ستظهر الموضوعات بعد المعالجة."))
+
+    lower_left, lower_right = st.columns([1.05, 0.95], vertical_alignment="top")
+    with lower_left:
+        st.markdown(f"### {t('Processing Document', 'معالجة الوثيقة')}")
         allow_openai = bool(settings.get("allow_openai_enhancement", True))
         secret_api_key = secret_value("openai_api_key", "")
         secret_model = secret_value("openai_model", "gpt-4o-mini")
         openai_api_key = st.text_input(t("OpenAI API key (optional)", "مفتاح OpenAI اختياري"), type="password", value="", placeholder=t("Uses deployed secret if left blank", "سيستخدم السر المنشور إذا تُرك فارغاً"), disabled=not allow_openai)
         openai_model = st.text_input(t("OpenAI model", "نموذج OpenAI"), value=secret_model, disabled=not allow_openai)
         effective_api_key = openai_api_key or secret_api_key or None
-        st.markdown(
-            f"<div class='kb-note-card'><h3>{t('AI Process', 'مسار الذكاء الاصطناعي')}</h3><p>{t('The system parses the PDF locally, detects sections and topic signals, drafts retrieval-ready articles, and optionally uses OpenAI only to improve wording.', 'يقوم النظام بتحليل ملف PDF محلياً، ويكتشف الأقسام وإشارات الموضوعات، ثم يصيغ مقالات جاهزة للاسترجاع، ويستخدم OpenAI اختيارياً فقط لتحسين الصياغة.')}</p></div>",
-            unsafe_allow_html=True,
-        )
         if secret_api_key and not openai_api_key:
             st.caption(t("Deployed OpenAI secret is configured and will be used automatically.", "تم إعداد سر OpenAI المنشور وسيتم استخدامه تلقائياً."))
 
-    process_cols = st.columns([1.1, 0.9])
-    process_clicked = process_cols[0].button(
+        process_clicked = st.button(
         t("Process", "معالجة"),
         disabled=uploaded is None,
         use_container_width=True,
-    )
-    process_cols[1].metric(t("Processing status", "حالة المعالجة"), str(st.session_state.get("processing_status") or "Ready"))
+        )
+        current_status = str(st.session_state.get("processing_status") or "Ready")
+        st.markdown(
+            f"""
+            <div class="kb-process-panel">
+              <div class="kb-process-row {'done' if current_status in ['Extracting text', 'Detecting topics', 'Completed'] else 'active'}">✓ {t('PDF Uploaded', 'تم رفع PDF')}</div>
+              <div class="kb-process-row {'done' if current_status in ['Detecting topics', 'Completed'] else 'active' if current_status == 'Extracting text' else 'pending'}">{'✓' if current_status in ['Detecting topics', 'Completed'] else '⟳' if current_status == 'Extracting text' else '•'} {t('Extracting Text', 'استخراج النص')}</div>
+              <div class="kb-process-row {'done' if current_status == 'Completed' else 'active' if current_status == 'Detecting topics' else 'pending'}">{'✓' if current_status == 'Completed' else '⟳' if current_status == 'Detecting topics' else '•'} {t('Detecting Topics', 'اكتشاف الموضوعات')}</div>
+              <div class="kb-process-row {'done' if current_status == 'Completed' else 'pending'}">{'✓' if current_status == 'Completed' else '•'} {t('Generating Knowledge Articles', 'إنشاء المقالات المعرفية')}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with lower_right:
+        render_page_header(
+            t("Generated Knowledge Articles", "المقالات المعرفية الناتجة"),
+            t("Review the generated article set and move directly into the full article workspace when ready.", "راجع مجموعة المقالات الناتجة وانتقل مباشرة إلى مساحة المقالات الكاملة عند الجاهزية."),
+        )
+        if draft is None:
+            st.info(t("Process a document to see article cards here.", "قم بمعالجة وثيقة لعرض بطاقات المقالات هنا."))
+        else:
+            preview_draft = KBDraft(
+                title=draft.title,
+                summary=draft.summary,
+                sections=draft.sections[:2],
+                visual_notes=draft.visual_notes,
+                table_notes=draft.table_notes,
+                warnings=draft.warnings,
+                llm_used=draft.llm_used,
+            )
+            render_topic_cards(preview_draft, privacy_on)
+            if st.button(t("Open Full Knowledge Articles", "فتح المقالات المعرفية الكاملة"), use_container_width=True):
+                st.session_state["selected_page"] = "articles"
+                st.rerun()
 
     if process_clicked:
         if uploaded is None:
@@ -713,18 +812,10 @@ def render_workspace(settings: dict) -> None:
         key="workspace_search",
         placeholder=t("Search by heading or extracted content", "ابحث بالعنوان أو بالمحتوى المستخرج"),
     ).strip().lower()
-    summary_cols = st.columns([1.05, 0.95])
-    with summary_cols[0]:
-        render_page_header(
-            t("Decomposition Summary", "ملخص التفكيك"),
-            t("Inspect detected sections, tables, and visual references before moving to article output.", "افحص الأقسام المكتشفة والجداول والإشارات البصرية قبل الانتقال إلى مخرجات المقالات."),
-        )
+    detail_tabs = st.tabs([t("Decomposition", "التفكيك"), t("Scan Assist", "مساعد المسح")])
+    with detail_tabs[0]:
         render_decomposition_sections(parse_result, privacy_on, search_query)
-    with summary_cols[1]:
-        render_page_header(
-            t("Page Quality & Scan Readiness", "جودة الصفحات وجاهزية المسح"),
-            t("Review OCR usage, image density, and scan recommendations page by page.", "راجع استخدام OCR وكثافة الصور وتوصيات المسح لكل صفحة."),
-        )
+    with detail_tabs[1]:
         render_scan_assist(parse_result)
     if draft is not None:
         nav_cols = st.columns(2)
